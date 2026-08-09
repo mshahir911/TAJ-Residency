@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Bed,
   ArrowLeft,
   ShieldCheck,
   Delete,
   Check,
   Key
 } from 'lucide-react';
+import TajLogo from './TajLogo';
 
 export default function LoginScreen({
   staffList = [],
@@ -154,21 +154,20 @@ export default function LoginScreen({
           <div className="p-6 sm:p-7 flex flex-col justify-between flex-1 animate-in fade-in duration-200">
             
             <div className="space-y-6 pt-2">
-              {/* Centered Brand Header */}
+              {/* Centered Brand Header with Official Shield Logo */}
               <div className="flex flex-col items-center text-center space-y-2.5">
-                {/* Bed glyph with brass stroke & dark panel */}
-                <div className="w-13 h-13 rounded-2xl bg-[#1B2333] border border-[#C9A24B] flex items-center justify-center text-[#C9A24B] shadow-lg shadow-[#C9A24B]/10 p-3">
-                  <Bed className="w-6 h-6 stroke-[1.8]" />
-                </div>
+                <TajLogo size={62} />
 
                 <div className="space-y-1">
                   <h1 className="font-display font-bold text-2xl sm:text-[26px] text-white tracking-tight">
                     {hotelName}
                   </h1>
-                  <div className="text-[9px] sm:text-[10px] font-mono uppercase tracking-[0.22em] text-[#C9A24B] font-semibold">
-                    PROPERTY MANAGEMENT SYSTEM
+                  <div className="flex items-center justify-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.22em] text-[#C9A24B] font-semibold">
+                    <span>📍 ADIVARAM</span>
+                    <span className="text-slate-500">•</span>
+                    <span>9961701414</span>
                   </div>
-                  <div className="text-xs text-slate-400 font-sans">
+                  <div className="text-xs text-slate-400 font-sans pt-0.5">
                     Staff Access Terminal
                   </div>
                 </div>
@@ -258,9 +257,7 @@ export default function LoginScreen({
               
               {/* Centered Brand Header */}
               <div className="flex flex-col items-center text-center space-y-1.5">
-                <div className="w-11 h-11 rounded-2xl bg-[#1B2333] border border-[#C9A24B] flex items-center justify-center text-[#C9A24B] shadow-sm p-2.5">
-                  <Bed className="w-5 h-5 stroke-[1.8]" />
-                </div>
+                <TajLogo size={48} />
                 <div>
                   <div className="font-display font-bold text-lg text-white">
                     {hotelName}

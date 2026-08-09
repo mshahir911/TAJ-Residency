@@ -1,0 +1,25 @@
+<svg width="128" height="128" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tajGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F5D77F" />
+      <stop offset="45%" stop-color="#C9A24B" />
+      <stop offset="100%" stop-color="#8F6E26" />
+    </linearGradient>
+    <radialGradient id="tajGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#C9A24B" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#C9A24B" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <circle cx="50" cy="50" r="48" fill="#0A1120" />
+  <circle cx="50" cy="50" r="48" fill="url(#tajGlow)" />
+
+  <circle cx="50" cy="50" r="40" stroke="url(#tajGoldGrad)" stroke-width="4.5" stroke-linecap="round" />
+  <circle cx="50" cy="50" r="34" stroke="#C9A24B" stroke-width="0.75" stroke-opacity="0.4" />
+
+  <g fill="url(#tajGoldGrad)">
+    <path d="M46.5 27 H53.5 V65 L50 71 L46.5 65 Z" />
+    <path d="M36 30 H43 V60 L36 52 Z" />
+    <path d="M57 30 H64 V52 L57 60 Z" />
+  </g>
+</svg>

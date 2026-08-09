@@ -16,6 +16,7 @@ import {
   Lock,
   LogOut
 } from 'lucide-react';
+import TajLogo from './TajLogo';
 
 export default function NavigationRail({
   activeTab,
@@ -64,9 +65,7 @@ export default function NavigationRail({
       {/* Top Brand & Navigation */}
       <div>
         <div className="p-4 pb-3 border-b border-brass-soft/20 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-panel-raised border border-brass flex items-center justify-center shadow-lg shadow-brass/10">
-            <span className="font-display font-bold text-brass text-lg">TR</span>
-          </div>
+          <TajLogo size={38} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h1 className="font-display font-bold text-white text-sm tracking-wide leading-tight truncate">
@@ -76,8 +75,8 @@ export default function NavigationRail({
                 PMS
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-mono tracking-tight truncate">
-              {property.city} • SAC 996311
+            <p className="text-[10px] text-[#C9A24B] font-mono tracking-tight truncate font-semibold">
+              ADIVARAM • 9961701414
             </p>
           </div>
         </div>

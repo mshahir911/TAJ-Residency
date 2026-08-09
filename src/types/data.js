@@ -150,15 +150,15 @@ export const SEED_PROPERTIES = [
   {
     id: 'taj-residency-calicut',
     name: 'Taj Residency',
-    subtitle: 'Tourist Home & Luxury Residency • Mavoor Road, Kozhikode',
-    address: 'Mavoor Road, Opp KSRTC Terminal, Kozhikode, Kerala 673001',
+    subtitle: 'Adivaram, Kozhikode • Kerala',
+    address: 'NH 766, Adivaram, Kozhikode, Kerala 673586',
     gst_number: '32AABCT9988Q1Z4',
-    phone: '+91 94950 11000',
-    whatsapp: '+91 94950 11000',
+    phone: '+91 99617 01414',
+    whatsapp: '+91 99617 01414',
     email: 'frontdesk@tajresidency.com',
-    wifiSSID: 'TajResidency_Guest5G',
+    wifiSSID: 'TajResidency_Adivaram',
     total_rooms: 11,
-    city: 'Kozhikode',
+    city: 'Adivaram, Kozhikode',
     state: 'Kerala'
   },
   {

@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Printer, ShieldCheck, Download, Tag } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatCurrency } from '../utils/formatters';
+import TajLogo from './TajLogo';
 
 export default function PaperInvoice({
   isOpen,
@@ -72,16 +73,14 @@ export default function PaperInvoice({
           {/* Header */}
           <div className="flex items-start justify-between border-b-2 border-[#11161D] pb-5">
             <div>
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded bg-[#0B0F14] text-[#C9A24B] font-display font-bold text-lg flex items-center justify-center">
-                  TR
-                </div>
+              <div className="flex items-center gap-3">
+                <TajLogo size={46} />
                 <div>
                   <h1 className="font-display font-bold text-2xl tracking-wide uppercase text-[#0B0F14]">
                     {property?.name || 'Taj Residency'}
                   </h1>
-                  <p className="text-xs text-slate-600 font-medium">
-                    {property?.subtitle || 'Tourist Home & Luxury Rooms • Main Beach Road, Kozhikode'}
+                  <p className="text-xs text-[#7A6B3E] font-semibold">
+                    📍 Adivaram, Kozhikode • Tel: +91 99617 01414
                   </p>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Wifi, Printer, Share2, ShieldCheck, Key, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import TajLogo from './TajLogo';
 
 export default function WiFiVoucherModal({
   isOpen,
@@ -12,7 +13,7 @@ export default function WiFiVoucherModal({
   if (!isOpen || !room) return null;
 
   const wifiCode = room.wifi_voucher_code || `TR-WIFI-${room.room_number}-77X9`;
-  const ssid = property?.wifiSSID || 'TajResidency_Guest_5G';
+  const ssid = property?.wifiSSID || 'TajResidency_Adivaram';
   const expiresAt = booking?.check_out_date || 'Checkout Date (11:00 AM)';
 
   const handlePrint = () => {
@@ -27,7 +28,8 @@ _Room ${room.room_number}_
 🔑 *Voucher Passcode:* \`${wifiCode}\`
 ⏳ *Valid Until:* ${expiresAt}
 
-_Connect to the network and enter the passcode above for uninterrupted browsing._`;
+_Connect to the network and enter the passcode above for uninterrupted browsing._
+📍 *Adivaram, Kozhikode • Tel: +91 99617 01414*`;
 
     const cleanPhone = (booking?.phone || '').replace(/[^0-9]/g, '');
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
@@ -40,15 +42,13 @@ _Connect to the network and enter the passcode above for uninterrupted browsing.
         {/* Header */}
         <div className="p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-brass text-ink font-bold flex items-center justify-center">
-              <Wifi className="w-5 h-5" />
-            </div>
+            <TajLogo size={36} />
             <div>
               <h2 className="font-display font-bold text-white text-base leading-none">
-                Room {room.room_number} WiFi Voucher
+                Room {room.room_number} WiFi Pass
               </h2>
-              <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                Auto-expiring guest access pass
+              <p className="text-[10px] text-[#C9A24B] font-mono mt-0.5 font-semibold">
+                Taj Residency • Adivaram (9961701414)
               </p>
             </div>
           </div>

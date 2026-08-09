@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Building2, ChevronDown, Plus, Check, MapPin, Sparkles } from 'lucide-react';
+import TajLogo from './TajLogo';
 
 export default function PropertySwitcher({
   properties = [],
@@ -19,9 +20,7 @@ export default function PropertySwitcher({
         onClick={() => setIsOpen(prev => !prev)}
         className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-panel-raised border border-brass-soft/40 hover:border-brass text-left transition-all shadow-md group active:scale-[0.99]"
       >
-        <div className="w-8 h-8 rounded-lg bg-ink border border-brass/40 flex items-center justify-center text-brass font-bold font-display text-sm group-hover:border-brass shrink-0">
-          <Building2 className="w-4 h-4" />
-        </div>
+        <TajLogo size={32} />
 
         <div className="min-w-0 pr-1">
           <div className="flex items-center gap-1.5">
@@ -29,11 +28,11 @@ export default function PropertySwitcher({
               {activeProp.name || 'Taj Residency'}
             </span>
             <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-brass/20 text-brass font-bold shrink-0">
-              {activeProp.city || 'Kozhikode'}
+              {activeProp.city || 'Adivaram'}
             </span>
           </div>
-          <p className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">
-            {activeProp.total_rooms || 11} Rooms • Multi-Property Live
+          <p className="text-[10px] text-[#C9A24B] font-mono truncate max-w-[180px] font-semibold">
+            📍 Adivaram • 9961701414
           </p>
         </div>
 
