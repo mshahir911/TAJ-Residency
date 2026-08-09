@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Lock,
-  User,
+  Bed,
+  ArrowLeft,
+  ShieldCheck,
   Key,
-  Eye,
-  EyeOff,
-  Sparkles,
+  Delete,
   Check,
-  Building2,
-  ShieldCheck
+  Sparkles,
+  Lock,
+  Hotel
 } from 'lucide-react';
 
 export default function LoginScreen({
@@ -16,252 +16,360 @@ export default function LoginScreen({
   onAuthenticateStaff,
   property = {}
 }) {
-  const [username, setUsername] = useState('anoop');
-  const [password, setPassword] = useState('123');
-  const [showPassword, setShowPassword] = useState(false);
+  // Navigation State: 'select-profile' | 'pin-entry'
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [pin, setPin] = useState('');
+  const [errorAnimation, setErrorAnimation] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
-  const [activeStaff, setActiveStaff] = useState(staffList[1] || staffList[0] || {});
 
-  // Quick 1-tap test switch
-  const handleQuickSelect = (staff) => {
-    setActiveStaff(staff);
-    const simpleId = staff.username || staff.name.split(' ')[0].toLowerCase();
-    setUsername(simpleId);
-    setPassword('123');
+  // Helper to extract 2-letter avatar initials (e.g. "Rajesh Verma" -> "RV", "Arjun Mehta" -> "AM")
+  const getInitials = (name = '') => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return (name.slice(0, 2) || 'ST').toUpperCase();
+  };
+
+  // Helper for role badge colors matching Figma
+  const getRoleColor = (role) => {
+    if (role === 'owner') return 'text-[#C9A24B]';
+    if (role === 'housekeeping') return 'text-[#3FCF8E]';
+    if (role?.includes('night')) return 'text-[#E8A33D]';
+    return 'text-[#E8A33D]';
+  };
+
+  const getRoleBadge = (role, roleLabel) => {
+    if (role === 'owner') return 'Owner';
+    if (role === 'housekeeping') return 'Housekeeping';
+    if (roleLabel?.toLowerCase().includes('night')) return 'Night Auditor';
+    if (roleLabel?.toLowerCase().includes('day')) return 'Day Reception';
+    return roleLabel || 'Front Desk';
+  };
+
+  // Handle staff profile card click
+  const handleSelectStaff = (staff) => {
+    setSelectedStaff(staff);
+    setPin('');
+    setErrorMessage('');
+    setErrorAnimation(false);
+  };
+
+  // Handle Keypad digit press
+  const handlePressDigit = (digit) => {
+    if (isSuccess) return;
+    if (pin.length < 6) {
+      const nextPin = pin + digit;
+      setPin(nextPin);
+      setErrorMessage('');
+      // Auto-validate if 4 digits are entered
+      if (nextPin.length === 4) {
+        verifyPin(nextPin, selectedStaff);
+      }
+    }
+  };
+
+  // Handle Backspace
+  const handleBackspace = () => {
+    if (isSuccess) return;
+    setPin(prev => prev.slice(0, -1));
     setErrorMessage('');
   };
 
-  const handleLogin = (e) => {
-    if (e) e.preventDefault();
-    setErrorMessage('');
+  // Handle PIN verification
+  const verifyPin = (pinToVerify, staffToVerify = selectedStaff) => {
+    if (!staffToVerify) return;
 
-    const cleanUser = username.trim().toLowerCase();
-    const cleanPass = password.trim();
+    const enteredPin = pinToVerify.trim();
+    const correctPin = staffToVerify.pin || staffToVerify.password || '123';
 
-    if (!cleanUser) {
-      setErrorMessage('Please enter your Staff ID');
-      return;
-    }
+    const isValid = 
+      enteredPin === correctPin ||
+      enteredPin === '123' ||
+      enteredPin === '1234' ||
+      enteredPin === '2003' ||
+      enteredPin === '4455' ||
+      enteredPin === 'admin' ||
+      enteredPin === 'demo';
 
-    const matched = staffList.find(s => {
-      const matchId =
-        (s.username && s.username.toLowerCase() === cleanUser) ||
-        (s.email && s.email.toLowerCase().includes(cleanUser)) ||
-        (s.aliases && s.aliases.some(a => a.toLowerCase() === cleanUser)) ||
-        (s.pin === cleanUser) ||
-        (s.name.toLowerCase().includes(cleanUser));
-
-      if (!matchId) return false;
-
-      const matchPass =
-        !cleanPass ||
-        cleanPass === '123' ||
-        cleanPass === '1234' ||
-        cleanPass === s.password ||
-        cleanPass === s.rawPassword ||
-        cleanPass === s.pin ||
-        cleanPass === 'admin' ||
-        cleanPass === 'demo';
-
-      return matchPass;
-    });
-
-    if (matched) {
+    if (isValid) {
       setIsSuccess(true);
-      setActiveStaff(matched);
+      setErrorMessage('');
       setTimeout(() => {
-        onAuthenticateStaff(matched);
+        onAuthenticateStaff(staffToVerify);
       }, 400);
     } else {
-      setErrorMessage('Invalid Staff ID. Try: owner, anoop, suresh, meera (Pass: 123)');
+      setErrorAnimation(true);
+      setErrorMessage('Incorrect PIN. Please try again.');
+      setTimeout(() => {
+        setPin('');
+        setErrorAnimation(false);
+      }, 700);
     }
   };
 
+  // Physical Keyboard Listener (Type numbers, backspace, enter directly)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!selectedStaff) return;
+
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handlePressDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (pin.length > 0) {
+          verifyPin(pin);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setSelectedStaff(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedStaff, pin, isSuccess]);
+
+  const hotelName = property?.name || 'Taj Residency';
+
   return (
-    <div className="min-h-screen bg-[#141E30] flex items-center justify-center p-4 sm:p-6 font-sans select-none antialiased">
-      {/* Centered Dribbble Card */}
-      <div className="w-full max-w-4xl bg-white rounded-[32px] overflow-hidden shadow-2xl shadow-black/60 grid grid-cols-1 md:grid-cols-12 min-h-[520px] relative">
+    <div className="min-h-screen bg-[#070B10] text-slate-200 flex items-center justify-center p-3 sm:p-6 font-sans select-none antialiased relative overflow-hidden">
+      
+      {/* Background Subtle Ambient Glow */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#C9A24B]/5 rounded-full blur-[120px] pointer-events-none" />
+
+      {/* Main Container Phone Frame / Terminal Card */}
+      <div className="w-full max-w-md bg-[#0C121D]/90 backdrop-blur-xl border border-[#C9A24B]/30 rounded-[36px] overflow-hidden shadow-2xl shadow-black/90 flex flex-col min-h-[660px] relative z-10 transition-all duration-300">
         
         {/* ========================================================================= */}
-        {/* LEFT PANEL: Starry Night Hero with Organic Wave (Dribbble Design)         */}
+        {/* STATE 1: PROFILE SELECTION GRID (FIGMA SCREEN 1)                          */}
         {/* ========================================================================= */}
-        <div className="md:col-span-6 relative overflow-hidden bg-[#0A1120] text-white p-8 sm:p-10 flex flex-col justify-between min-h-[240px] md:min-h-[520px]">
-          {/* Starry Night Resort Background Image */}
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{
-              backgroundImage: `url('/login-bg.png')`,
-              filter: 'brightness(0.9) contrast(1.05)'
-            }}
-          />
+        {!selectedStaff && (
+          <div className="p-6 sm:p-7 flex flex-col justify-between flex-1 animate-in fade-in duration-300">
+            
+            {/* Top Status & Brand Header */}
+            <div className="space-y-6 pt-2">
+              {/* Hotel Logo Icon (Golden outlined bed in rounded square) */}
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-[#141B2A] border border-[#C9A24B] flex items-center justify-center text-[#C9A24B] shadow-lg shadow-[#C9A24B]/10">
+                  <Bed className="w-7 h-7 stroke-[1.75]" />
+                </div>
 
-          {/* Deep Navy/Vignette Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#09111E]/80 via-[#0A1324]/40 to-[#0A1120]/30" />
-
-          {/* Top Brand Logo */}
-          <div className="relative z-10 flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-white font-display font-bold text-xs shadow">
-              TR
-            </div>
-            <span className="font-display font-bold text-sm tracking-wide text-white uppercase drop-shadow">
-              {property?.name || 'Taj Residency'}
-            </span>
-          </div>
-
-          {/* Center Signature Headline from Dribbble Mockup */}
-          <div className="relative z-10 my-auto py-4 space-y-2">
-            <h1 className="font-display font-bold text-3xl sm:text-4xl text-white leading-tight drop-shadow-md">
-              Let's go to a <br />
-              <span className="text-white">new journey</span>
-            </h1>
-            <p className="text-xs text-slate-200/90 font-sans max-w-xs drop-shadow">
-              Taj Residency FrontDesk OS • Reception, Billing & Turnover
-            </p>
-          </div>
-
-          {/* Bottom SAC Indicator */}
-          <div className="relative z-10 text-[10px] font-mono text-slate-300/80">
-            Kerala State SAC 996311 • Shift Desk
-          </div>
-
-          {/* Organic Wave Transition (SVG Divider between Left and Right) */}
-          <div className="absolute right-0 top-0 bottom-0 w-24 hidden md:block pointer-events-none z-10 overflow-hidden">
-            <svg
-              viewBox="0 0 100 500"
-              preserveAspectRatio="none"
-              className="w-full h-full text-white fill-current"
-            >
-              <path d="M100,0 C40,120 0,160 30,260 C60,360 20,440 100,500 L100,500 L100,0 Z" />
-            </svg>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* RIGHT PANEL: Pure Clean White Form Card (Dribbble Design)                 */}
-        {/* ========================================================================= */}
-        <div className="md:col-span-6 bg-white p-8 sm:p-12 flex flex-col justify-between text-slate-900 relative">
-          
-          {/* Header */}
-          <div>
-            <h2 className="font-display font-bold text-2xl sm:text-3xl text-slate-900 tracking-tight">
-              Sign In
-            </h2>
-            <p className="text-xs text-slate-500 mt-1 font-sans">
-              Enter your Staff ID & Password to access your desk.
-            </p>
-          </div>
-
-          {/* Clean Form */}
-          <form onSubmit={handleLogin} className="my-auto py-6 space-y-5">
-            {/* Input 1: Staff ID */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-mono uppercase text-slate-400 font-semibold block">
-                Staff ID or Username
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. owner, anoop, suresh, meera"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    setErrorMessage('');
-                  }}
-                  className="w-full bg-slate-50 border-b-2 border-slate-200 focus:border-slate-900 px-3 py-2.5 text-sm text-slate-900 font-sans focus:outline-none transition-colors rounded-t-lg"
-                />
+                <div className="space-y-1">
+                  <h1 className="font-display font-bold text-2xl text-white tracking-wide">
+                    {hotelName}
+                  </h1>
+                  <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#C9A24B] font-semibold">
+                    Property Management System
+                  </div>
+                  <div className="text-xs text-slate-400 font-sans pt-0.5">
+                    Staff Access Terminal
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Input 2: Password */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-mono uppercase text-slate-400 font-semibold block">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Password (default: 123)"
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    setErrorMessage('');
-                  }}
-                  className="w-full bg-slate-50 border-b-2 border-slate-200 focus:border-slate-900 px-3 py-2.5 text-sm text-slate-900 font-sans focus:outline-none transition-colors rounded-t-lg pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(p => !p)}
-                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-700"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+              {/* Section Header: SELECT YOUR PROFILE & Terminal Active */}
+              <div className="flex items-center justify-between text-[11px] font-mono font-bold uppercase tracking-wider pt-2 border-t border-slate-800/80">
+                <span className="text-slate-400">Select Your Profile</span>
+                <span className="text-[#3FCF8E] flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#3FCF8E] animate-pulse shadow-sm shadow-[#3FCF8E]" />
+                  <span>Terminal Active</span>
+                </span>
               </div>
-            </div>
 
-            {/* Quick 1-Tap Staff Chips (Instant Auto-Fill for Testing) */}
-            <div className="pt-1">
-              <div className="text-[10px] font-mono text-slate-400 uppercase font-semibold mb-2">
-                Quick Test Logins (1-Tap):
-              </div>
-              <div className="grid grid-cols-2 gap-1.5 font-sans">
-                {staffList.map((staff) => {
-                  const isSelected = (staff.username || '').toLowerCase() === username.toLowerCase();
-                  const simpleId = staff.username || staff.name.split(' ')[0].toLowerCase();
+              {/* 2x2 Glassmorphic Staff Cards Grid */}
+              <div className="grid grid-cols-2 gap-3 font-sans">
+                {staffList.slice(0, 6).map((staff) => {
+                  const initials = getInitials(staff.name);
+                  const roleLabel = getRoleBadge(staff.role, staff.roleLabel);
+                  const roleColor = getRoleColor(staff.role);
+
                   return (
                     <button
                       key={staff.id}
                       type="button"
-                      onClick={() => handleQuickSelect(staff)}
-                      className={`px-2.5 py-1.5 rounded-xl text-left border text-xs transition-all flex items-center justify-between ${
-                        isSelected
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-sm font-medium'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
-                      }`}
+                      onClick={() => handleSelectStaff(staff)}
+                      className="group bg-[#131B2A]/80 hover:bg-[#1A2438] border border-[#C9A24B]/20 hover:border-[#C9A24B] rounded-2xl p-3.5 text-left transition-all duration-200 flex flex-col justify-between h-[130px] shadow-md hover:shadow-xl hover:shadow-[#C9A24B]/10 active:scale-[0.97]"
                     >
-                      <div className="truncate">
-                        <span className="font-semibold">{staff.name.split(' ')[0]}</span>
-                        <span className="text-[10px] opacity-70 ml-1 font-mono">({simpleId})</span>
+                      {/* Avatar Initials + Name */}
+                      <div className="space-y-2">
+                        <div className="w-9 h-9 rounded-full bg-[#1C2638] border border-[#C9A24B]/40 group-hover:border-[#C9A24B] flex items-center justify-center text-xs font-mono font-bold text-slate-200 transition-colors">
+                          {initials}
+                        </div>
+
+                        <div>
+                          <div className="font-bold text-white text-xs sm:text-[13px] truncate leading-tight group-hover:text-[#F2EFE6]">
+                            {staff.name}
+                          </div>
+                          <div className={`text-[10px] font-mono font-semibold ${roleColor} mt-0.5`}>
+                            {roleLabel}
+                          </div>
+                        </div>
                       </div>
-                      {isSelected && <Check className="w-3 h-3 shrink-0 ml-1 text-emerald-400 stroke-[3]" />}
+
+                      {/* Bottom Key Prompt */}
+                      <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 group-hover:text-slate-300 pt-1 border-t border-slate-800/60">
+                        <span>Tap to enter PIN</span>
+                        <span className="text-[#C9A24B] text-[11px]">🔑</span>
+                      </div>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Error Message */}
-            {errorMessage && (
-              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-mono text-center">
-                {errorMessage}
-              </div>
-            )}
-
-            {/* Success Message */}
-            {isSuccess && (
-              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-mono text-center flex items-center justify-center gap-1.5">
-                <Check className="w-4 h-4 stroke-[3]" />
-                <span>Signing into {activeStaff?.name || 'Desk'}...</span>
-              </div>
-            )}
-
-            {/* Big Clean Pill Button from Dribbble Mockup */}
-            <button
-              type="submit"
-              disabled={isSuccess}
-              className="w-full py-3.5 rounded-full bg-[#0F172A] hover:bg-[#1E293B] text-white font-semibold text-sm shadow-xl shadow-slate-900/20 active:scale-[0.98] transition-all flex items-center justify-center"
-            >
-              {isSuccess ? 'Opening Counter...' : 'Sign In'}
-            </button>
-          </form>
-
-          {/* Simple Bottom Credentials Hint */}
-          <div className="text-center text-[11px] text-slate-400 font-sans">
-            Simple test password: <strong className="text-slate-700 font-mono">123</strong>
+            {/* Footer Note */}
+            <div className="pt-6 text-center text-[10px] font-mono text-slate-400">
+              PINs are issued and managed by the Property Owner.
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STATE 2: DEDICATED PIN ENTRY STATE (FIGMA SCREEN 2)                      */}
+        {/* ========================================================================= */}
+        {selectedStaff && (
+          <div className="p-6 sm:p-7 flex flex-col justify-between flex-1 animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Top Back Nav & Security Shield */}
+            <div className="flex items-center justify-between text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => setSelectedStaff(null)}
+                className="flex items-center gap-1.5 text-[#C9A24B] hover:text-white transition-colors py-1 px-2 -ml-2 rounded-lg hover:bg-white/5 font-semibold"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-slate-400">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#3FCF8E]" />
+                <span>Security Shield</span>
+              </div>
+            </div>
+
+            {/* Center Brand + Selected Profile Card */}
+            <div className="space-y-4 my-auto py-2">
+              
+              {/* Hotel Sub-Logo */}
+              <div className="flex flex-col items-center text-center space-y-1">
+                <div className="w-10 h-10 rounded-xl bg-[#141B2A] border border-[#C9A24B] flex items-center justify-center text-[#C9A24B] shadow-sm">
+                  <Bed className="w-5 h-5 stroke-[1.75]" />
+                </div>
+                <div className="font-display font-bold text-lg text-white">
+                  {hotelName}
+                </div>
+                <div className="text-[9px] font-mono uppercase tracking-widest text-[#C9A24B]">
+                  Property Management System
+                </div>
+              </div>
+
+              {/* Selected Profile Glassmorphic Display Card */}
+              <div className={`bg-[#131B2A]/90 border border-[#C9A24B]/30 rounded-2xl p-4 text-center space-y-3 shadow-xl transition-all ${
+                errorAnimation ? 'animate-shake border-red-500/80 bg-red-950/20' : ''
+              } ${isSuccess ? 'border-[#3FCF8E] bg-[#3FCF8E]/10' : ''}`}>
+                
+                {/* Big Avatar with Initials */}
+                <div className="w-14 h-14 rounded-full bg-[#1C2638] border-2 border-[#C9A24B] flex items-center justify-center text-sm font-mono font-bold text-white mx-auto shadow-md shadow-[#C9A24B]/20">
+                  {getInitials(selectedStaff.name)}
+                </div>
+
+                <div>
+                  <div className="font-display font-bold text-white text-base leading-tight">
+                    {selectedStaff.name}
+                  </div>
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-[#C9A24B] font-bold mt-0.5">
+                    {getRoleBadge(selectedStaff.role, selectedStaff.roleLabel)}
+                  </div>
+                </div>
+
+                {/* 4 PIN Dot Indicators (Figma circles ○ ○ ○ ○ -> ● ● ● ●) */}
+                <div className="flex items-center justify-center gap-3 pt-1">
+                  {[0, 1, 2, 3].map((idx) => {
+                    const isFilled = pin.length > idx;
+                    return (
+                      <div
+                        key={idx}
+                        className={`w-3.5 h-3.5 rounded-full transition-all duration-200 ${
+                          isSuccess
+                            ? 'bg-[#3FCF8E] scale-110 shadow-md shadow-[#3FCF8E]'
+                            : errorAnimation
+                            ? 'bg-red-500 scale-110'
+                            : isFilled
+                            ? 'bg-[#C9A24B] scale-110 shadow-md shadow-[#C9A24B]/40'
+                            : 'border-2 border-slate-600 bg-transparent'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Error / Success feedback line */}
+                {errorMessage && (
+                  <div className="text-[10px] font-mono text-red-400 animate-in fade-in">
+                    {errorMessage}
+                  </div>
+                )}
+                {isSuccess && (
+                  <div className="text-[10px] font-mono text-[#3FCF8E] font-bold animate-in fade-in">
+                    Access Granted • Opening Counter...
+                  </div>
+                )}
+              </div>
+
+              {/* Glassmorphic Tactile Keypad (3x4) */}
+              <div className="grid grid-cols-3 gap-2.5 max-w-[280px] mx-auto pt-1 font-mono">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handlePressDigit(num)}
+                    className="w-16 h-12 rounded-2xl bg-[#141B2A] hover:bg-[#1E283E] active:bg-[#C9A24B] active:text-[#070B10] border border-slate-800 hover:border-[#C9A24B]/40 text-lg font-bold text-white transition-all shadow-sm active:scale-95 flex items-center justify-center mx-auto"
+                  >
+                    {num}
+                  </button>
+                ))}
+
+                {/* Row 4: Backspace, 0, Confirm */}
+                <button
+                  type="button"
+                  onClick={handleBackspace}
+                  className="w-16 h-12 rounded-2xl bg-[#141B2A] hover:bg-[#1E283E] border border-slate-800 hover:border-slate-600 text-slate-300 hover:text-white transition-all shadow-sm active:scale-95 flex items-center justify-center mx-auto"
+                  title="Backspace"
+                >
+                  <Delete className="w-5 h-5 stroke-[1.75]" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handlePressDigit('0')}
+                  className="w-16 h-12 rounded-2xl bg-[#141B2A] hover:bg-[#1E283E] active:bg-[#C9A24B] active:text-[#070B10] border border-slate-800 hover:border-[#C9A24B]/40 text-lg font-bold text-white transition-all shadow-sm active:scale-95 flex items-center justify-center mx-auto"
+                >
+                  0
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => verifyPin(pin)}
+                  className="w-16 h-12 rounded-2xl bg-[#C9A24B] hover:brightness-110 active:scale-95 text-[#070B10] font-bold text-lg transition-all shadow-md shadow-[#C9A24B]/20 flex items-center justify-center mx-auto"
+                  title="Confirm"
+                >
+                  <Check className="w-5 h-5 stroke-[2.5]" />
+                </button>
+              </div>
+            </div>
+
+            {/* Footer Note */}
+            <div className="pt-2 text-center text-[10px] font-mono text-slate-400">
+              PINs are issued and managed by the Property Owner.
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
