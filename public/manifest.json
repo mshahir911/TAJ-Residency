@@ -1,0 +1,41 @@
+{
+  "name": "FrontDesk OS — Taj Residency PMS",
+  "short_name": "Taj PMS",
+  "description": "Night Desk, Reception Counter & Mobile Housekeeping Property Management System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0F14",
+  "theme_color": "#0B0F14",
+  "orientation": "any",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Room Grid",
+      "short_name": "Grid",
+      "description": "View 11-Room Keycard Grid",
+      "url": "/#grid",
+      "icons": [{ "src": "/pwa-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Housekeeping Board",
+      "short_name": "Cleaning",
+      "description": "1-Tap Mobile Cleaner Board",
+      "url": "/#housekeeping",
+      "icons": [{ "src": "/pwa-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
