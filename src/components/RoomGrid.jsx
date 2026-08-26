@@ -23,7 +23,8 @@ export default function RoomGrid({
   onCheckout,
   onMarkClean,
   onOpenWiFi,
-  onExtendStay
+  onExtendStay,
+  onViewGuestId
 }) {
   const [selectedFloor, setSelectedFloor] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -142,7 +143,7 @@ export default function RoomGrid({
       </div>
 
       {/* Control Strip: Floor Tabs & Status Filters (Unambiguous Filled Brass Active State) */}
-      <div className="bg-panel/90 border border-brass-soft/30 rounded-2xl p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 shadow-md select-none">
+      <div className="bg-panel/85 backdrop-blur-xl border border-brass-soft/30 rounded-2xl p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 shadow-lg select-none">
         
         {/* Floor Selection */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
@@ -213,6 +214,7 @@ export default function RoomGrid({
               onMarkClean={onMarkClean}
               onOpenWiFi={onOpenWiFi}
               onExtendStay={onExtendStay}
+              onViewGuestId={onViewGuestId}
             />
           );
         })}

@@ -16,17 +16,19 @@ export default function GlobalSearchModal({
   onOpenFolio,
   onWalkIn
 }) {
-  if (!isOpen) return null;
-
   const [query, setQuery] = useState('');
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
     };
-    window.addEventListener('keydown', handleKeyDown);
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
 
   const results = rooms.filter(room => {
     if (!query) return true;

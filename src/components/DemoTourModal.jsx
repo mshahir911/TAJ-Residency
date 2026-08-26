@@ -17,9 +17,9 @@ export default function DemoTourModal({
   onClose,
   onResetDemo
 }) {
-  if (!isOpen) return null;
-
   const [currentSlide, setCurrentSlide] = useState(0);
+
+  if (!isOpen) return null;
 
   const slides = [
     {

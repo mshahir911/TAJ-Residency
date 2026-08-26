@@ -14,7 +14,8 @@ import {
   Calendar,
   Sparkles,
   Tag,
-  Gift
+  Gift,
+  ArrowLeft
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatCurrency, formatDateTime } from '../utils/formatters';
@@ -34,15 +35,14 @@ export default function FolioModal({
   onCheckoutAndGenerateInvoice,
   onPreviewInvoice,
   onOpenPrintInvoice,
-  onExtendStay
+  onExtendStay,
+  onViewIdPhoto
 }) {
-  if (!isOpen || !room) return null;
-
   // Auto-resolve booking if passed as collection or direct prop
-  const activeBookingId = room.current_booking_id;
+  const activeBookingId = room?.current_booking_id;
   const booking = propBooking || (bookings && activeBookingId ? bookings[activeBookingId] : null) || {
     id: activeBookingId || 'bk-curr',
-    room_id: room.id,
+    room_id: room?.id || '',
     guest_id: 'gst-01',
     check_in_date: '2026-08-08 14:00',
     nights: 1,
@@ -54,10 +54,12 @@ export default function FolioModal({
 
   // Auto-resolve guest
   const guest = propGuest || (Array.isArray(guests) ? guests.find(g => g.id === booking.guest_id) : null) || {
-    name: room.last_guest_name || 'Dr. Vivek Menon',
+    name: room?.last_guest_name || 'Dr. Vivek Menon',
     phone: '+91 98470 11223',
     address: 'Medical College Junction, Kozhikode',
-    id_proof_type: 'Aadhaar Card'
+    id_proof_type: 'Aadhaar Card',
+    id_proof_number: 'XXXX-XXXX-4812',
+    id_proof_photo_url: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&auto=format&fit=crop&q=80'
   };
 
   const [paymentMode, setPaymentMode] = useState('UPI');
@@ -177,36 +179,74 @@ _We look forward to welcoming you back to Calicut!_`;
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-in fade-in duration-200">
-      <div className="bg-panel-raised border border-brass/50 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col max-h-[94vh]">
+  // Esc key listener for fast back-navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
-        {/* Header */}
-        <div className="p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass font-display font-bold text-lg shadow-md shadow-brass/20">
+  if (!isOpen || !room) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay animate-in fade-in duration-200">
+      <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[94vh]">
+
+        {/* Header with Mobile Back Button & Safe Area */}
+        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1 py-1.5 px-2.5 rounded-lg bg-ink hover:bg-panel text-brass hover:text-white border border-brass-soft/40 font-mono text-xs font-bold transition-all shrink-0 active:scale-95"
+              title="Back to room grid"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>Back</span>
+            </button>
+
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass font-display font-bold text-base sm:text-lg shadow-md shadow-brass/20 shrink-0">
               {room.room_number}
             </div>
-            <div>
-              <h2 className="font-display font-bold text-white text-lg leading-none">
-                Checkout & Billing — {guest?.name || 'In-House Guest'}
-              </h2>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                {property.name || 'Taj Residency'} • GSTIN: {property.gst_number || '32AABCT9988Q1Z4'}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <h2 className="font-display font-bold text-white text-sm sm:text-lg leading-tight truncate">
+                  Checkout — {guest?.name || 'In-House Guest'}
+                </h2>
+                {guest?.id_proof_photo_url && (
+                  <button
+                    type="button"
+                    onClick={() => onViewIdPhoto && onViewIdPhoto(guest.id_proof_photo_url, `${guest.name}'s ${guest.id_proof_type}`)}
+                    className="px-1.5 py-0.5 rounded bg-signal-green/15 text-signal-green hover:bg-signal-green/30 text-[9px] font-mono font-bold border border-signal-green/30 flex items-center gap-1 shrink-0"
+                    title="Click to inspect guest ID proof"
+                  >
+                    <span>✓ ID</span>
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                {guest?.id_proof_type || 'Govt ID'}: {guest?.id_proof_number || 'VERIFIED'} • {property.name || 'Taj Residency'}
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-panel hover:bg-ink text-slate-400 hover:text-white flex items-center justify-center border border-brass-soft/30"
+            className="w-8 h-8 rounded-lg bg-panel hover:bg-ink text-slate-400 hover:text-white flex items-center justify-center border border-brass-soft/30 shrink-0"
+            title="Close (Esc)"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Billing Body */}
-        <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+        {/* Billing Body with Native Touch Momentum Scroll */}
+        <div className="p-4 sm:p-5 space-y-4 flex-1 min-h-0 overflow-y-auto overscroll-contain touch-scroll text-xs">
 
           {/* Stay Duration & Stay Extension */}
           <div className="bg-ink p-3.5 rounded-xl border border-brass-soft/40 space-y-2">
@@ -416,31 +456,41 @@ _We look forward to welcoming you back to Calicut!_`;
             </div>
           </div>
 
-          {/* WhatsApp Instant Share & Paper Print Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+        </div>
+
+        {/* Pinned Action Footer with Safe Area */}
+        <div className="shrink-0 p-3 sm:p-4 bg-panel border-t border-brass-soft/30 pb-safe space-y-2 shadow-lg z-20">
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-2.5 px-2 rounded-xl bg-ink hover:bg-panel border border-brass-soft/30 text-slate-300 hover:text-white font-mono font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back</span>
+            </button>
+
             <button
               type="button"
               onClick={handleShareWhatsApp}
-              className="py-2.5 px-3 rounded-xl bg-signal-green/20 hover:bg-signal-green text-signal-green hover:text-ink border border-signal-green/40 font-mono font-bold text-xs flex items-center justify-center gap-2 transition-all"
+              className="py-2.5 px-2 rounded-xl bg-signal-green/20 hover:bg-signal-green text-signal-green hover:text-ink border border-signal-green/40 font-mono font-bold text-xs flex items-center justify-center gap-1 transition-all active:scale-95 truncate"
             >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>Share Tax Bill on WhatsApp</span>
+              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">WhatsApp</span>
             </button>
 
             <button
               type="button"
               onClick={handleExecuteCheckout}
-              className="py-2.5 px-3 rounded-xl bg-brass text-ink font-mono font-bold text-xs shadow-lg shadow-brass/20 hover:brightness-110 active:scale-95 flex items-center justify-center gap-2 transition-all"
+              className="py-2.5 px-2 rounded-xl bg-brass text-ink font-mono font-bold text-xs shadow-lg shadow-brass/20 hover:brightness-110 active:scale-95 flex items-center justify-center gap-1 transition-all truncate"
             >
-              <Receipt className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Settle & Issue Invoice</span>
+              <Receipt className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
+              <span className="truncate">Settle</span>
             </button>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-3 bg-panel border-t border-brass-soft/20 text-center font-mono text-[10px] text-slate-500">
-          Kerala State GST SAC: 996311 • Room will automatically switch to DIRTY for Housekeeping turnover
+          <div className="text-center font-mono text-[9px] text-slate-500 hidden sm:block">
+            Kerala State GST SAC: 996311 • Room switches to DIRTY for Housekeeping turnover
+          </div>
         </div>
       </div>
     </div>

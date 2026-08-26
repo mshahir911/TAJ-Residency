@@ -11,18 +11,19 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
+import GSTSettingsModal from './GSTSettingsModal';
 
 export default function DailyCollectionsReport({
-  invoices,
-  stats,
-  gstConfig,
+  invoices = [],
+  stats = {},
+  gstConfig = {},
+  onUpdateGST,
   onUpdateGstConfig,
-  property
+  property = {},
+  onOpenGSTSettings
 }) {
   const [showGstModal, setShowGstModal] = useState(false);
-  const [standardRate, setStandardRate] = useState(gstConfig.standardRate || 12);
-  const [luxuryRate, setLuxuryRate] = useState(gstConfig.luxuryRate || 18);
-  const [slabThreshold, setSlabThreshold] = useState(gstConfig.slabThreshold || 7500);
+  const handleSaveGST = onUpdateGST || onUpdateGstConfig;
 
   const handleExportCSV = () => {
     const headers = 'Invoice No,Room,Guest Name,Phone,Nights,Room Charge,GST Amount,Total,Payment Mode,Settled At\n';
@@ -183,85 +184,14 @@ export default function DailyCollectionsReport({
         </div>
       </div>
 
-      {/* Configurable GST Slabs Modal */}
-      {showGstModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
-          <div className="bg-panel-raised border border-brass/50 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display font-bold text-white text-base">
-                Configure Indian Hotel GST Slabs
-              </h3>
-              <button onClick={() => setShowGstModal(false)} className="text-slate-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-400">
-              Indian GST slab tier rules for hotel accommodation tariff:
-            </p>
-
-            <div className="space-y-3 font-mono text-xs">
-              <div>
-                <label className="text-[10px] uppercase text-slate-400 block mb-1">
-                  Slab Tariff Threshold (₹)
-                </label>
-                <input
-                  type="number"
-                  value={slabThreshold}
-                  onChange={(e) => setSlabThreshold(Number(e.target.value))}
-                  className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-2 text-white font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] uppercase text-slate-400 block mb-1">
-                  Standard GST Rate (≤ ₹{slabThreshold}) %
-                </label>
-                <input
-                  type="number"
-                  value={standardRate}
-                  onChange={(e) => setStandardRate(Number(e.target.value))}
-                  className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-2 text-white font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] uppercase text-slate-400 block mb-1">
-                  Luxury GST Rate (Above ₹{slabThreshold}) %
-                </label>
-                <input
-                  type="number"
-                  value={luxuryRate}
-                  onChange={(e) => setLuxuryRate(Number(e.target.value))}
-                  className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-2 text-white font-bold"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2">
-              <button
-                onClick={() => setShowGstModal(false)}
-                className="px-4 py-2 rounded-lg bg-panel text-slate-300 text-xs font-semibold"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  onUpdateGstConfig({
-                    slabThreshold,
-                    standardRate,
-                    luxuryRate
-                  });
-                  setShowGstModal(false);
-                }}
-                className="px-4 py-2 rounded-lg bg-brass text-ink font-bold text-xs shadow"
-              >
-                Save GST Rules
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Full-featured GST Configuration Modal */}
+      <GSTSettingsModal
+        isOpen={showGstModal}
+        onClose={() => setShowGstModal(false)}
+        gstConfig={gstConfig}
+        property={property}
+        onSaveGSTSettings={handleSaveGST}
+      />
     </div>
   );
 }

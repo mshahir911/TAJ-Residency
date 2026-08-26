@@ -23,7 +23,9 @@ export default function OwnerAnalyticsDashboard({
   seasonalOverrides = [],
   onOpenOverrides,
   onOpenExpenses,
-  onOpenOnboarding
+  onOpenOnboarding,
+  onOpenGSTSettings,
+  onBackToGrid
 }) {
   // Helper for heatmap cell color intensity
   const getCellColor = (val) => {
@@ -55,6 +57,25 @@ export default function OwnerAnalyticsDashboard({
 
         {/* Action Pills */}
         <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+          {onBackToGrid && (
+            <button
+              onClick={onBackToGrid}
+              className="px-3.5 py-2 rounded-xl bg-panel-raised border border-brass-soft/50 text-slate-200 hover:text-white font-bold transition-all flex items-center gap-1.5 shadow-md"
+            >
+              <span>← Room Grid</span>
+            </button>
+          )}
+
+          {onOpenGSTSettings && (
+            <button
+              onClick={onOpenGSTSettings}
+              className="px-3.5 py-2 rounded-xl bg-panel-raised border border-brass-soft/50 text-slate-200 hover:text-white hover:border-brass font-bold transition-all flex items-center gap-1.5 shadow-md"
+            >
+              <Percent className="w-3.5 h-3.5 text-brass" />
+              <span>Configure GST & Tax</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenOverrides}
             className="px-3.5 py-2 rounded-xl bg-panel-raised border border-brass-soft/50 text-brass hover:border-brass font-bold transition-all flex items-center gap-1.5 shadow-md"

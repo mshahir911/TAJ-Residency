@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Users,
@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Sparkles,
   Lock,
+  ArrowLeft,
   Clock
 } from 'lucide-react';
 
@@ -22,7 +23,18 @@ export default function StaffManagementModal({
   onUpdateStaffPin,
   property
 }) {
-  if (!isOpen) return null;
+  // Esc key listener for back-navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [name, setName] = useState('');
@@ -81,21 +93,32 @@ export default function StaffManagementModal({
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-in fade-in duration-200">
-      <div className="bg-panel-raised border border-brass/50 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay animate-in fade-in duration-200">
+      <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[92vh]">
+        {/* Header with Mobile Back Button & Safe Area */}
+        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1 py-1.5 px-2.5 rounded-lg bg-ink hover:bg-panel text-brass hover:text-white border border-brass-soft/40 font-mono text-xs font-bold transition-all shrink-0 active:scale-95"
+              title="Close modal"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>Back</span>
+            </button>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass shrink-0 hidden sm:flex">
               <Users className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="font-display font-bold text-white text-lg leading-none">
-                Staff Administration & PIN Management
+            <div className="min-w-0">
+              <h2 className="font-display font-bold text-white text-sm sm:text-lg leading-tight truncate">
+                Staff Admin & PINs
               </h2>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                {property?.name || 'Taj Residency'} • Manage Receptionists, Housekeeping, Shift Hours & 4-Digit Security PINs
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                {property?.name || 'Taj Residency'} • Manage Access & PINs
               </p>
             </div>
           </div>

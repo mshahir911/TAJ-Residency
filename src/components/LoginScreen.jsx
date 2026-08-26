@@ -4,9 +4,12 @@ import {
   ShieldCheck,
   Delete,
   Check,
-  Key
+  Key,
+  Moon,
+  Sun
 } from 'lucide-react';
 import TajLogo from './TajLogo';
+import { getInitialTheme, toggleTheme } from '../utils/theme';
 
 export default function LoginScreen({
   staffList = [],
@@ -19,6 +22,22 @@ export default function LoginScreen({
   const [errorAnimation, setErrorAnimation] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  useEffect(() => {
+    const handleThemeChange = (e) => {
+      if (e.detail?.theme) {
+        setTheme(e.detail.theme);
+      }
+    };
+    window.addEventListener('taj-theme-change', handleThemeChange);
+    return () => window.removeEventListener('taj-theme-change', handleThemeChange);
+  }, []);
+
+  const handleToggleTheme = () => {
+    const newTheme = toggleTheme(theme);
+    setTheme(newTheme);
+  };
 
   // Helper: Extract 2-letter avatar initials in JetBrains Mono (e.g. "Arjun Mehta" -> "AM", "Rajesh Verma" -> "RV")
   const getInitials = (name = '') => {
@@ -146,6 +165,20 @@ export default function LoginScreen({
 
       {/* Fixed-Width Terminal Card (~420px max-width) - Identical across Mobile, Tablet & Desktop */}
       <div className="w-full max-w-[420px] bg-[#121826]/85 backdrop-blur-2xl border border-[#C9A24B]/30 rounded-[32px] overflow-hidden shadow-2xl shadow-black/90 flex flex-col min-h-[640px] relative z-10 transition-all duration-300">
+        
+        {/* Top-Right Theme Toggle Button */}
+        <button
+          type="button"
+          onClick={handleToggleTheme}
+          className="absolute top-4 right-4 z-20 p-2 rounded-xl bg-ink/70 hover:bg-panel border border-brass-soft/30 text-slate-400 hover:text-brass transition-all active:scale-95 shadow-sm"
+          title={theme === 'dark' ? "Switch to White Theme" : "Switch to Dark Theme"}
+        >
+          {theme === 'dark' ? (
+            <Moon className="w-4 h-4 text-brass" />
+          ) : (
+            <Sun className="w-4 h-4 text-signal-amber" />
+          )}
+        </button>
         
         {/* ========================================================================= */}
         {/* STATE 1: PROFILE SELECTION GRID (Figma Screen 1)                          */}

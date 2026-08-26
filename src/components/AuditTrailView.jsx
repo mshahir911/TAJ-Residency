@@ -9,7 +9,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-export default function AuditTrailView({ auditLogs, property }) {
+export default function AuditTrailView({ auditLogs, property, onBackToGrid }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [actionFilter, setActionFilter] = useState('all');
 
@@ -53,16 +53,27 @@ export default function AuditTrailView({ auditLogs, property }) {
           </p>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-brass absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search by staff, room, or action details..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-ink border border-brass-soft/50 rounded-xl pl-9 pr-4 py-2 text-white text-xs placeholder-slate-500 focus:border-brass font-sans"
-          />
+        {/* Action Controls & Search */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {onBackToGrid && (
+            <button
+              onClick={onBackToGrid}
+              className="px-3.5 py-2 rounded-xl bg-panel-raised border border-brass-soft/40 text-slate-300 hover:text-white font-bold text-xs font-mono transition-all shrink-0"
+            >
+              ← Room Grid
+            </button>
+          )}
+
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-brass absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by staff, room, or action details..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-ink border border-brass-soft/50 rounded-xl pl-9 pr-4 py-2 text-white text-xs placeholder-slate-500 focus:border-brass font-sans"
+            />
+          </div>
         </div>
       </div>
 

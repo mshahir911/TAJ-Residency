@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Building2,
@@ -21,9 +21,24 @@ export default function PropertyOnboardingWizard({
   onClose,
   onCompleteOnboarding
 }) {
-  if (!isOpen) return null;
-
   const [step, setStep] = useState(1);
+
+  // Esc key listener for back-navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (step > 1) {
+          setStep(prev => prev - 1);
+        } else {
+          onClose();
+        }
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, step, onClose]);
 
   // Step 1: Property Profile
   const [name, setName] = useState('Malabar Heritage Tourist Home');
@@ -85,21 +100,35 @@ export default function PropertyOnboardingWizard({
     }, 1600);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-in fade-in duration-200">
-      <div className="bg-panel-raised border border-brass/50 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brass text-ink font-bold flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay animate-in fade-in duration-200">
+      <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[92vh]">
+        {/* Header with Mobile Back Button & Safe Area */}
+        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => {
+                if (step > 1) setStep(prev => prev - 1);
+                else onClose();
+              }}
+              className="flex items-center gap-1 py-1.5 px-2.5 rounded-lg bg-ink hover:bg-panel text-brass hover:text-white border border-brass-soft/40 font-mono text-xs font-bold transition-all shrink-0 active:scale-95"
+              title={step > 1 ? "Previous step" : "Close wizard"}
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>Back</span>
+            </button>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-brass text-ink font-bold flex items-center justify-center shrink-0 hidden sm:flex">
               <Building2 className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="font-display font-bold text-white text-lg leading-none">
-                Property Setup Wizard (Self-Onboard in &lt;10 Mins)
+            <div className="min-w-0">
+              <h2 className="font-display font-bold text-white text-sm sm:text-lg leading-tight truncate">
+                Property Setup Wizard
               </h2>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Step {step} of 4 • Multi-Property Onboarding Engine
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                Step {step} of 4 • Multi-Property Engine
               </p>
             </div>
           </div>
@@ -346,12 +375,20 @@ export default function PropertyOnboardingWizard({
             {step > 1 ? (
               <button
                 onClick={() => setStep(step - 1)}
-                className="py-2 px-4 rounded-xl bg-panel-raised border border-brass-soft text-slate-300 font-mono text-xs hover:text-white flex items-center gap-1.5"
+                className="py-2 px-4 rounded-xl bg-panel-raised border border-brass-soft text-slate-300 font-mono text-xs hover:text-white flex items-center gap-1.5 transition-all"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back</span>
               </button>
-            ) : <div />}
+            ) : (
+              <button
+                onClick={onClose}
+                className="py-2 px-4 rounded-xl bg-panel-raised border border-brass-soft text-slate-400 font-mono text-xs hover:text-white flex items-center gap-1.5 transition-all"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Cancel</span>
+              </button>
+            )}
 
             {step < 4 ? (
               <button

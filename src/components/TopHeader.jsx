@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Bed,
   Moon,
+  Sun,
   Clock,
   Wifi,
   Coins,
@@ -12,6 +13,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
+import { getInitialTheme, toggleTheme } from '../utils/theme';
 import PropertySwitcher from './PropertySwitcher';
 
 export default function TopHeader({
@@ -20,6 +22,7 @@ export default function TopHeader({
   activePropertyId,
   onSwitchProperty,
   onOpenOnboarding,
+  onOpenDatabaseModal,
   isOnline,
   stats,
   onOpenWalkIn,
@@ -28,6 +31,23 @@ export default function TopHeader({
   currentRole
 }) {
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  // Sync theme changes
+  useEffect(() => {
+    const handleThemeChange = (e) => {
+      if (e.detail?.theme) {
+        setTheme(e.detail.theme);
+      }
+    };
+    window.addEventListener('taj-theme-change', handleThemeChange);
+    return () => window.removeEventListener('taj-theme-change', handleThemeChange);
+  }, []);
+
+  const handleToggleTheme = () => {
+    const newTheme = toggleTheme(theme);
+    setTheme(newTheme);
+  };
 
   // Live real-time clock ticking every 1000ms
   useEffect(() => {
@@ -53,7 +73,7 @@ export default function TopHeader({
   const cashAmount = formatCurrency(stats?.cashRevenue || 15680);
 
   return (
-    <header className="bg-panel border-b border-brass-soft/30 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4 select-none sticky top-0 z-30 shadow-md">
+    <header className="bg-panel/85 backdrop-blur-xl border-b border-brass-soft/30 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-4 select-none sticky top-0 z-30 shadow-md">
       {/* Left: Property Switcher & Night Desk Badge */}
       <div className="flex items-center gap-2 min-w-0">
         <PropertySwitcher
@@ -67,18 +87,43 @@ export default function TopHeader({
       {/* Center: Live Desk Clock & Night Auditor Banner (Large Desktop >=1024px) */}
       <div className="hidden lg:flex items-center gap-3 font-mono text-xs">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-ink border border-brass-soft/30 shadow-inner">
-          <Moon className="w-3.5 h-3.5 text-brass animate-pulse" />
+          {theme === 'dark' ? (
+            <Moon className="w-3.5 h-3.5 text-brass animate-pulse" />
+          ) : (
+            <Sun className="w-3.5 h-3.5 text-signal-amber animate-spin-slow" />
+          )}
           <span className="text-brass font-bold tracking-wider">{nowTime}</span>
           <span className="text-slate-400">• {todayDate}</span>
         </div>
       </div>
 
-      {/* Right: Cash in Drawer, Online Sync, Shift Handover CTA & Walk-in */}
-      <div className="flex items-center gap-2 font-mono text-xs shrink-0">
+      {/* Right: Theme Toggle, Cash in Drawer, Online Sync & Walk-in */}
+      <div className="flex items-center gap-1.5 sm:gap-2 font-mono text-xs shrink-0">
+        {/* Luxury Theme Switcher Button */}
+        <button
+          type="button"
+          onClick={handleToggleTheme}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-ink border border-brass-soft/40 hover:border-brass text-slate-300 hover:text-white transition-all shadow-sm active:scale-95 shrink-0 group"
+          title={theme === 'dark' ? "Switch to White Theme (Day Mode)" : "Switch to Dark Theme (Night Desk Mode)"}
+          aria-label="Toggle dark and white theme"
+        >
+          {theme === 'dark' ? (
+            <>
+              <Moon className="w-3.5 h-3.5 text-brass transition-transform group-hover:-rotate-12" />
+              <span className="text-[11px] font-bold text-brass hidden md:inline">Dark</span>
+            </>
+          ) : (
+            <>
+              <Sun className="w-3.5 h-3.5 text-signal-amber transition-transform group-hover:rotate-45" />
+              <span className="text-[11px] font-bold text-signal-amber hidden md:inline">White</span>
+            </>
+          )}
+        </button>
+
         {/* Cash in Drawer Pill — Guaranteed non-clipping with tabular nums */}
         <button
           onClick={onOpenShiftHandover}
-          className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-ink border border-brass-soft/40 hover:border-brass text-left transition-all shrink-0"
+          className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-ink border border-brass-soft/40 hover:border-brass text-left transition-all shrink-0 active:scale-95"
           title="Click to view Shift Handover & Drawer Cash"
         >
           <Coins className="w-3.5 h-3.5 text-signal-green shrink-0" />
@@ -91,15 +136,17 @@ export default function TopHeader({
         </button>
 
         {/* Sync Status Badge / Dot */}
-        <div
-          className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-ink border border-brass-soft/30 shrink-0"
-          title={isOnline ? 'System is Online & Synced' : 'Offline / Local storage active'}
+        <button
+          type="button"
+          onClick={onOpenDatabaseModal}
+          className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-ink border border-brass-soft/30 hover:border-brass text-slate-300 hover:text-white shrink-0 transition-colors"
+          title={isOnline ? 'System is Online & Cloud Synced' : 'Offline / Local storage active'}
         >
           <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-signal-green pulse-green' : 'bg-signal-amber'}`} />
-          <span className="text-[10px] text-slate-300 font-bold uppercase tracking-wider hidden sm:inline">
+          <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">
             {isOnline ? 'ONLINE' : 'LOCAL'}
           </span>
-        </div>
+        </button>
 
         {/* Walk-in Button (Desktop only here, mobile has bottom bar trigger) */}
         {currentRole !== 'housekeeping' && (

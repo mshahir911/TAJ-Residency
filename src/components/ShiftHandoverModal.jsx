@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Coins,
@@ -8,7 +8,8 @@ import {
   FileSpreadsheet,
   ArrowRight,
   TrendingUp,
-  UserCheck
+  UserCheck,
+  ArrowLeft
 } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
 
@@ -21,7 +22,18 @@ export default function ShiftHandoverModal({
   onCloseShiftHandover,
   property
 }) {
-  if (!isOpen) return null;
+  // Esc key listener for back-navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const [activeTab, setActiveTab] = useState('close'); // 'close' | 'history' | 'summary'
   const [physicalCash, setPhysicalCash] = useState(stats.cashRevenue || currentShift.openingCash);
@@ -49,21 +61,32 @@ export default function ShiftHandoverModal({
 
   const lastShift = shiftLogs[0] || null;
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-in fade-in duration-200">
-      <div className="bg-panel-raised border border-brass/50 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass font-display font-bold text-lg">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay animate-in fade-in duration-200">
+      <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[92vh]">
+        {/* Header with Mobile Back Button & Safe Area */}
+        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1 py-1.5 px-2.5 rounded-lg bg-ink hover:bg-panel text-brass hover:text-white border border-brass-soft/40 font-mono text-xs font-bold transition-all shrink-0 active:scale-95"
+              title="Close modal"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>Back</span>
+            </button>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass font-display font-bold text-base sm:text-lg shrink-0 hidden sm:flex">
               <Clock className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="font-display font-bold text-white text-lg leading-none">
-                Reception Shift Handover & Cash Tally
+            <div className="min-w-0">
+              <h2 className="font-display font-bold text-white text-sm sm:text-lg leading-tight truncate">
+                Shift Handover & Cash Tally
               </h2>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                {currentShift.name} • Current Lead: {currentShift.staffName}
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                {currentShift.name} • {currentShift.staffName}
               </p>
             </div>
           </div>
@@ -219,13 +242,22 @@ export default function ShiftHandoverModal({
                     />
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 rounded-lg bg-brass text-ink font-bold text-xs shadow-lg shadow-brass/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Confirm Cash & Handover Shift</span>
-                  </button>
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="px-4 py-2.5 rounded-lg bg-panel border border-brass-soft/30 text-slate-300 hover:text-white font-bold text-xs transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-2.5 rounded-lg bg-brass text-ink font-bold text-xs shadow-lg shadow-brass/20 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Confirm Cash & Handover Shift</span>
+                    </button>
+                  </div>
                 </form>
               )}
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   QrCode,
@@ -10,9 +10,12 @@ import {
   Shield,
   FileText,
   Upload,
-  ArrowRight
+  ArrowRight,
+  ArrowLeft,
+  Eye
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import IdPhotoCaptureWidget from './IdPhotoCaptureWidget';
 
 export default function GuestSelfCheckinModal({
   isOpen,
@@ -21,9 +24,21 @@ export default function GuestSelfCheckinModal({
   onConfirmSelfCheckin,
   onAddSelfCheckin,
   rooms = [],
-  property
+  property,
+  onViewIdPhoto
 }) {
-  if (!isOpen) return null;
+  // Esc key listener for back-navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'guest-portal' | 'qr-code'
   
@@ -33,6 +48,8 @@ export default function GuestSelfCheckinModal({
   const [address, setAddress] = useState('Panampilly Nagar, Kochi, Kerala');
   const [idType, setIdType] = useState('Aadhaar Card');
   const [idNumber, setIdNumber] = useState('XXXX-XXXX-4512');
+  const [idPhotoUrl, setIdPhotoUrl] = useState('https://images.unsplash.com/photo-1544717305-2782549b5136?w=400&auto=format&fit=crop&q=80');
+  const [idPhotoBackUrl, setIdPhotoBackUrl] = useState('');
   const [eta, setEta] = useState('Tonight 21:30 IST');
   const [selectedRoom, setSelectedRoom] = useState('room-202');
   const [submittedMessage, setSubmittedMessage] = useState(false);
@@ -47,6 +64,8 @@ export default function GuestSelfCheckinModal({
       address,
       id_proof_type: idType,
       id_proof_number: idNumber,
+      id_proof_photo_url: idPhotoUrl,
+      id_proof_back_photo_url: idPhotoBackUrl,
       eta,
       room_number: '202'
     });
@@ -59,21 +78,32 @@ export default function GuestSelfCheckinModal({
 
   const vacantRooms = rooms.filter(r => r.status === 'vacant' || r.status === 'ready');
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-in fade-in duration-200">
-      <div className="bg-panel-raised border border-brass/50 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay animate-in fade-in duration-200">
+      <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[92vh]">
+        {/* Header with Mobile Back Button & Safe Area */}
+        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1 py-1.5 px-2.5 rounded-lg bg-ink hover:bg-panel text-brass hover:text-white border border-brass-soft/40 font-mono text-xs font-bold transition-all shrink-0 active:scale-95"
+              title="Close portal"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>Back</span>
+            </button>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass shrink-0 hidden sm:flex">
               <QrCode className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="font-display font-bold text-white text-lg leading-none">
-                Guest Self-Registration QR Portal
+            <div className="min-w-0">
+              <h2 className="font-display font-bold text-white text-sm sm:text-lg leading-tight truncate">
+                Guest Self-Registration QR
               </h2>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Pre-fill ID proof & digital signature before reaching front desk
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                Pre-fill ID proof & digital signature before desk
               </p>
             </div>
           </div>
@@ -168,9 +198,21 @@ export default function GuestSelfCheckinModal({
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-panel p-2.5 rounded-lg border border-brass-soft/20">
+                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono bg-panel p-2.5 rounded-lg border border-brass-soft/20 items-center">
                         <div>ID Proof: <strong className="text-slate-200">{item.id_proof_type} ({item.id_proof_number})</strong></div>
-                        <div>Address: <strong className="text-slate-200">{item.address}</strong></div>
+                        <div className="flex items-center justify-between">
+                          <span>Address: <strong className="text-slate-200">{item.address}</strong></span>
+                          {item.id_proof_photo_url && (
+                            <button
+                              type="button"
+                              onClick={() => onViewIdPhoto && onViewIdPhoto(item.id_proof_photo_url, `${item.guest_name}'s ${item.id_proof_type}`)}
+                              className="px-2 py-0.5 rounded bg-brass/20 text-brass text-[10px] hover:bg-brass/40 flex items-center gap-1 font-bold"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View ID</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* 1-Click Confirmation to Room */}
@@ -281,13 +323,17 @@ export default function GuestSelfCheckinModal({
                     </div>
                   </div>
 
-                  <div className="p-3 bg-panel rounded-lg border border-brass-soft/20 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 text-slate-300">
-                      <Upload className="w-4 h-4 text-brass" />
-                      <span>ID Photo Document: <strong className="text-signal-green">aadhaar_front.jpg (Attached)</strong></span>
-                    </div>
-                    <span className="text-[10px] font-mono text-slate-400">Captured ✓</span>
-                  </div>
+                  {/* ID Document Photo Capture / Upload */}
+                  <IdPhotoCaptureWidget
+                    frontPhotoUrl={idPhotoUrl}
+                    backPhotoUrl={idPhotoBackUrl}
+                    idType={idType}
+                    guestPhone={phone}
+                    onChangeFront={(url) => setIdPhotoUrl(url)}
+                    onChangeBack={(url) => setIdPhotoBackUrl(url)}
+                    onViewFullscreen={(img, t) => onViewIdPhoto && onViewIdPhoto(img, t)}
+                    compact={true}
+                  />
 
                   <button
                     type="submit"

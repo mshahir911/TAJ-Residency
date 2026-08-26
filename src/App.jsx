@@ -22,6 +22,9 @@ import SeasonalOverrideModal from './components/SeasonalOverrideModal';
 import PropertyOnboardingWizard from './components/PropertyOnboardingWizard';
 import LoginScreen from './components/LoginScreen';
 import StaffManagementModal from './components/StaffManagementModal';
+import IdDocumentViewerModal from './components/IdDocumentViewerModal';
+import GSTSettingsModal from './components/GSTSettingsModal';
+import DatabaseSettingsModal from './components/DatabaseSettingsModal';
 
 export default function App() {
   const store = usePMSStore();
@@ -53,6 +56,38 @@ export default function App() {
   const [isSeasonalModalOpen, setIsSeasonalModalOpen] = useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
   const [isStaffAdminOpen, setIsStaffAdminOpen] = useState(false);
+  const [isGSTModalOpen, setIsGSTModalOpen] = useState(false);
+  const [isDatabaseModalOpen, setIsDatabaseModalOpen] = useState(false);
+
+  // ID Document Viewer Lightbox State
+  const [isIdViewerOpen, setIsIdViewerOpen] = useState(false);
+  const [idViewerData, setIdViewerData] = useState({
+    guest: null,
+    photoUrl: '',
+    backPhotoUrl: '',
+    title: 'Government ID Document'
+  });
+
+  const handleViewGuestIdDoc = (guest) => {
+    if (!guest) return;
+    setIdViewerData({
+      guest,
+      photoUrl: guest.id_proof_photo_url || '',
+      backPhotoUrl: guest.id_proof_back_photo_url || '',
+      title: `${guest.name}'s ${guest.id_proof_type || 'ID Document'}`
+    });
+    setIsIdViewerOpen(true);
+  };
+
+  const handleViewIdPhoto = (photoUrl, title = 'Government ID Document') => {
+    setIdViewerData({
+      guest: null,
+      photoUrl,
+      backPhotoUrl: '',
+      title
+    });
+    setIsIdViewerOpen(true);
+  };
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -83,6 +118,8 @@ export default function App() {
         setActiveTab('housekeeping');
       } else if (e.key.toLowerCase() === 'a' && store.currentRole === 'owner') {
         setActiveTab('audit');
+      } else if (e.key.toLowerCase() === 't' && store.currentRole === 'owner') {
+        setIsGSTModalOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -184,6 +221,7 @@ export default function App() {
             onOpenWalkIn={() => handleOpenWalkIn(null)}
             onOpenSearch={() => setIsSearchOpen(true)}
             onOpenStaffAdmin={() => setIsStaffAdminOpen(true)}
+            onOpenGSTSettings={() => setIsGSTModalOpen(true)}
             onSignOut={handleSignOut}
             dirtyCount={store.stats.dirtyRooms}
             property={store.property}
@@ -201,6 +239,7 @@ export default function App() {
             activePropertyId={store.activePropertyId}
             onSwitchProperty={store.actions.switchProperty}
             onOpenOnboarding={() => setIsOnboardingModalOpen(true)}
+            onOpenDatabaseModal={() => setIsDatabaseModalOpen(true)}
             isOnline={store.isOnline}
             stats={store.stats}
             onOpenWalkIn={() => handleOpenWalkIn(null)}
@@ -223,6 +262,7 @@ export default function App() {
                 onMarkClean={handleMarkClean}
                 onOpenWiFi={handleOpenWiFi}
                 onExtendStay={store.actions.extendBookingStay}
+                onViewGuestId={handleViewGuestIdDoc}
               />
             )}
 
@@ -244,6 +284,7 @@ export default function App() {
                 onUpdateGST={store.actions.updateGSTConfig}
                 property={store.property}
                 canEditRates={store.roleConfig.canEditRates}
+                onOpenGSTSettings={() => setIsGSTModalOpen(true)}
               />
             )}
 
@@ -253,9 +294,11 @@ export default function App() {
                 guests={store.guests}
                 bookings={store.bookings}
                 rooms={store.rooms}
-                onBookReturningGuest={(g) => {
+                onNewBookingForGuest={(g) => {
                   handleOpenWalkIn(null);
                 }}
+                onViewGuestIdDoc={handleViewGuestIdDoc}
+                onUpdateGuestId={store.actions.updateGuestIdProof}
               />
             )}
 
@@ -269,6 +312,8 @@ export default function App() {
                 onOpenOverrides={() => setIsSeasonalModalOpen(true)}
                 onOpenExpenses={() => setActiveTab('pl')}
                 onOpenOnboarding={() => setIsOnboardingModalOpen(true)}
+                onOpenGSTSettings={() => setIsGSTModalOpen(true)}
+                onBackToGrid={() => setActiveTab('grid')}
               />
             )}
 
@@ -279,6 +324,7 @@ export default function App() {
                 stats={store.stats}
                 onAddExpense={store.actions.addExpense}
                 property={store.property}
+                onBackToGrid={() => setActiveTab('grid')}
               />
             )}
 
@@ -287,6 +333,7 @@ export default function App() {
               <AuditTrailView
                 auditLogs={store.auditLogs}
                 property={store.property}
+                onBackToGrid={() => setActiveTab('grid')}
               />
             )}
           </main>
@@ -313,6 +360,7 @@ export default function App() {
           onOpenWalkIn={() => handleOpenWalkIn(null)}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenStaffAdmin={() => setIsStaffAdminOpen(true)}
+          onOpenGSTSettings={() => setIsGSTModalOpen(true)}
           onSignOut={handleSignOut}
           dirtyCount={store.stats.dirtyRooms}
           property={store.property}
@@ -324,122 +372,178 @@ export default function App() {
       {/* MODALS */}
 
       {/* 1. Fast Walk-In Modal */}
-      <WalkInModal
-        isOpen={isWalkInOpen}
-        onClose={() => setIsWalkInOpen(false)}
-        rooms={store.rooms}
-        selectedRoom={walkInSelectedRoom}
-        onSaveBooking={handleSaveBooking}
-        onLookupPhone={store.actions.findGuestByPhone}
-        onCalculateGST={store.actions.calculateGST}
-        getRateForRoom={store.actions.getRateForRoom}
-      />
+      {isWalkInOpen && (
+        <WalkInModal
+          isOpen={isWalkInOpen}
+          onClose={() => setIsWalkInOpen(false)}
+          rooms={store.rooms}
+          selectedRoom={walkInSelectedRoom}
+          onSaveBooking={handleSaveBooking}
+          onLookupPhone={store.actions.findGuestByPhone}
+          onCalculateGST={store.actions.calculateGST}
+          getRateForRoom={store.actions.getRateForRoom}
+          onViewIdPhoto={handleViewIdPhoto}
+        />
+      )}
 
       {/* 2. Folio & Checkout Modal */}
-      <FolioModal
-        isOpen={isFolioOpen}
-        onClose={() => setIsFolioOpen(false)}
-        room={folioSelectedRoom}
-        bookings={store.bookings}
-        guests={store.guests}
-        property={store.property}
-        calculateGST={store.actions.calculateGST}
-        onFinalizeCheckout={handleFinalizeCheckout}
-        onExtendStay={store.actions.extendBookingStay}
-        onPreviewInvoice={(inv) => {
-          setCurrentInvoice(inv);
-          setIsPaperInvoiceOpen(true);
-        }}
-      />
+      {isFolioOpen && folioSelectedRoom && (
+        <FolioModal
+          isOpen={isFolioOpen}
+          onClose={() => setIsFolioOpen(false)}
+          room={folioSelectedRoom}
+          bookings={store.bookings}
+          guests={store.guests}
+          property={store.property}
+          calculateGST={store.actions.calculateGST}
+          onFinalizeCheckout={handleFinalizeCheckout}
+          onExtendStay={store.actions.extendBookingStay}
+          onPreviewInvoice={(inv) => {
+            setCurrentInvoice(inv);
+            setIsPaperInvoiceOpen(true);
+          }}
+          onViewIdPhoto={handleViewIdPhoto}
+        />
+      )}
 
       {/* 3. Paper Palette Tax Invoice Modal (#F2EFE6) */}
-      <PaperInvoice
-        isOpen={isPaperInvoiceOpen}
-        onClose={() => setIsPaperInvoiceOpen(false)}
-        invoice={currentInvoice}
-        property={store.property}
-        gstConfig={store.gstConfig}
-      />
+      {isPaperInvoiceOpen && (
+        <PaperInvoice
+          isOpen={isPaperInvoiceOpen}
+          onClose={() => setIsPaperInvoiceOpen(false)}
+          invoice={currentInvoice}
+          room={folioSelectedRoom}
+          property={store.property}
+          gstConfig={store.gstConfig}
+        />
+      )}
 
       {/* 4. Global Search Modal (⌘K) */}
-      <GlobalSearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        rooms={store.rooms}
-        guests={store.guests}
-        bookings={store.bookings}
-        onSelectRoom={(room) => {
-          setIsSearchOpen(false);
-          setActiveTab('grid');
-          if (room.status === 'vacant') {
-            handleOpenWalkIn(room);
-          } else if (room.status === 'occupied') {
-            handleOpenCheckout(room);
-          }
-        }}
-      />
+      {isSearchOpen && (
+        <GlobalSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          rooms={store.rooms}
+          guests={store.guests}
+          bookings={store.bookings}
+          onSelectRoom={(room) => {
+            setIsSearchOpen(false);
+            setActiveTab('grid');
+            if (room.status === 'vacant') {
+              handleOpenWalkIn(room);
+            } else if (room.status === 'occupied') {
+              handleOpenCheckout(room);
+            }
+          }}
+        />
+      )}
 
       {/* 5. Shift Handover & Cash Reconciliation Modal */}
-      <ShiftHandoverModal
-        isOpen={isShiftModalOpen}
-        onClose={() => setIsShiftModalOpen(false)}
-        currentShift={store.currentShift}
-        shiftLogs={store.shiftLogs}
-        stats={store.stats}
-        onCloseShiftHandover={store.actions.closeShiftHandover}
-        property={store.property}
-      />
+      {isShiftModalOpen && (
+        <ShiftHandoverModal
+          isOpen={isShiftModalOpen}
+          onClose={() => setIsShiftModalOpen(false)}
+          currentShift={store.currentShift}
+          shiftLogs={store.shiftLogs}
+          stats={store.stats}
+          onCloseShiftHandover={store.actions.closeShiftHandover}
+          property={store.property}
+        />
+      )}
 
       {/* 6. WiFi Voucher Pass Modal */}
-      <WiFiVoucherModal
-        isOpen={isWiFiModalOpen}
-        onClose={() => setIsWiFiModalOpen(false)}
-        room={wiFiModalRoom}
-        booking={wiFiModalBooking}
-        property={store.property}
-      />
+      {isWiFiModalOpen && (
+        <WiFiVoucherModal
+          isOpen={isWiFiModalOpen}
+          onClose={() => setIsWiFiModalOpen(false)}
+          room={wiFiModalRoom}
+          booking={wiFiModalBooking}
+          property={store.property}
+        />
+      )}
 
       {/* 7. Guest Self-Checkin QR Modal */}
-      <GuestSelfCheckinModal
-        isOpen={isSelfCheckinModalOpen}
-        onClose={() => setIsSelfCheckinModalOpen(false)}
-        selfCheckins={store.selfCheckins}
-        onConfirmSelfCheckin={store.actions.confirmSelfCheckin}
-        onAddSelfCheckin={store.actions.addGuestSelfCheckin}
-        rooms={store.rooms}
-        property={store.property}
-      />
+      {isSelfCheckinModalOpen && (
+        <GuestSelfCheckinModal
+          isOpen={isSelfCheckinModalOpen}
+          onClose={() => setIsSelfCheckinModalOpen(false)}
+          selfCheckins={store.selfCheckins}
+          onConfirmSelfCheckin={store.actions.confirmSelfCheckin}
+          onAddSelfCheckin={store.actions.addGuestSelfCheckin}
+          rooms={store.rooms}
+          property={store.property}
+          onViewIdPhoto={handleViewIdPhoto}
+        />
+      )}
 
       {/* 8. Seasonal & Dynamic Rate Override Modal */}
-      <SeasonalOverrideModal
-        isOpen={isSeasonalModalOpen}
-        onClose={() => setIsSeasonalModalOpen(false)}
-        seasonalOverrides={store.seasonalOverrides}
-        onAddOverride={store.actions.addSeasonalOverride}
-        onDeleteOverride={store.actions.deleteSeasonalOverride}
-        roomTypes={store.roomTypes}
-        property={store.property}
-      />
+      {isSeasonalModalOpen && (
+        <SeasonalOverrideModal
+          isOpen={isSeasonalModalOpen}
+          onClose={() => setIsSeasonalModalOpen(false)}
+          seasonalOverrides={store.seasonalOverrides}
+          onAddOverride={store.actions.addSeasonalOverride}
+          onDeleteOverride={store.actions.deleteSeasonalOverride}
+          roomTypes={store.roomTypes}
+          property={store.property}
+        />
+      )}
 
       {/* 9. Property Onboarding Setup Wizard */}
-      <PropertyOnboardingWizard
-        isOpen={isOnboardingModalOpen}
-        onClose={() => setIsOnboardingModalOpen(false)}
-        onCompleteOnboarding={(propData) => {
-          const newPropId = store.actions.onboardNewProperty(propData);
-          setActiveTab('grid');
-        }}
-      />
+      {isOnboardingModalOpen && (
+        <PropertyOnboardingWizard
+          isOpen={isOnboardingModalOpen}
+          onClose={() => setIsOnboardingModalOpen(false)}
+          onCompleteOnboarding={(propData) => {
+            const newPropId = store.actions.onboardNewProperty(propData);
+            setActiveTab('grid');
+          }}
+        />
+      )}
 
       {/* 10. Staff Admin & PIN Management Modal (Owner Only) */}
-      <StaffManagementModal
-        isOpen={isStaffAdminOpen}
-        onClose={() => setIsStaffAdminOpen(false)}
-        staffList={store.staffList}
-        onAddStaff={(staffData) => { }}
-        onUpdateStaffPin={(staffId, newPin) => { }}
-        property={store.property}
-      />
+      {isStaffAdminOpen && (
+        <StaffManagementModal
+          isOpen={isStaffAdminOpen}
+          onClose={() => setIsStaffAdminOpen(false)}
+          staffList={store.staffList}
+          onAddStaff={(staffData) => { }}
+          onUpdateStaffPin={(staffId, newPin) => { }}
+          property={store.property}
+        />
+      )}
+
+      {/* 11. Full-Resolution Guest ID Document Inspector Lightbox */}
+      {isIdViewerOpen && (
+        <IdDocumentViewerModal
+          isOpen={isIdViewerOpen}
+          onClose={() => setIsIdViewerOpen(false)}
+          guest={idViewerData.guest}
+          photoUrl={idViewerData.photoUrl}
+          backPhotoUrl={idViewerData.backPhotoUrl}
+          title={idViewerData.title}
+        />
+      )}
+
+      {/* 12. Legal GST & Tax Slab Configuration Modal */}
+      {isGSTModalOpen && (
+        <GSTSettingsModal
+          isOpen={isGSTModalOpen}
+          onClose={() => setIsGSTModalOpen(false)}
+          gstConfig={store.gstConfig}
+          property={store.property}
+          onSaveGSTSettings={store.actions.updateGSTConfig}
+        />
+      )}
+
+      {/* 13. Cloud Sync & Postgres Architecture Inspector Modal */}
+      {isDatabaseModalOpen && (
+        <DatabaseSettingsModal
+          isOpen={isDatabaseModalOpen}
+          onClose={() => setIsDatabaseModalOpen(false)}
+          property={store.property}
+        />
+      )}
     </div>
   );
 }

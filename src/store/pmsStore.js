@@ -470,6 +470,7 @@ export function usePMSStore() {
     guestIdType,
     guestIdNumber,
     guestIdPhotoUrl,
+    guestIdBackPhotoUrl,
     guestNotes,
     checkInDate,
     checkOutDate,
@@ -481,6 +482,9 @@ export function usePMSStore() {
   }) => {
     const room = (state.rooms || SEED_ROOMS).find(r => r.id === roomId);
     if (!room) return;
+
+    const authorStaff = created_by_staff_name || currentStaff?.name || 'Receptionist';
+    const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
     let existingGuest = findGuestByPhone(guestPhone);
     let guestId = existingGuest ? existingGuest.id : `gst-${Date.now()}`;
@@ -496,6 +500,9 @@ export function usePMSStore() {
             id_proof_type: guestIdType || g.id_proof_type,
             id_proof_number: guestIdNumber || g.id_proof_number,
             id_proof_photo_url: guestIdPhotoUrl || g.id_proof_photo_url,
+            id_proof_back_photo_url: guestIdBackPhotoUrl || g.id_proof_back_photo_url,
+            id_verified_at: guestIdPhotoUrl ? nowTimestamp : (g.id_verified_at || nowTimestamp),
+            id_verified_by_staff: authorStaff,
             notes: guestNotes || g.notes,
             total_stays: (g.total_stays || 1) + 1
           };
@@ -512,6 +519,9 @@ export function usePMSStore() {
         id_proof_type: guestIdType || 'Aadhaar Card',
         id_proof_number: guestIdNumber || 'VERIFIED-DESK',
         id_proof_photo_url: guestIdPhotoUrl || '',
+        id_proof_back_photo_url: guestIdBackPhotoUrl || '',
+        id_verified_at: guestIdPhotoUrl ? nowTimestamp : '',
+        id_verified_by_staff: guestIdPhotoUrl ? authorStaff : '',
         notes: guestNotes || 'Walk-in Guest',
         total_stays: 1,
         lifetime_spend: 0
@@ -526,7 +536,6 @@ export function usePMSStore() {
     const rateApplied = rateLookup.rate;
     const bookingId = `bk-${room.room_number}-${Date.now().toString().slice(-4)}`;
     const wifiCode = generateWiFiCode(room.room_number);
-    const authorStaff = created_by_staff_name || currentStaff?.name || 'Receptionist';
 
     const newBooking = {
       id: bookingId,
@@ -852,22 +861,81 @@ export function usePMSStore() {
     }));
   };
 
-  // 10. GST Config
-  const updateGSTConfig = (newConfig) => {
+  // 9b. Update Guest ID Proof (Front/Back/Type/Number) directly from Directory or Inspection
+  const updateGuestIdProof = (guestId, {
+    idType,
+    idNumber,
+    idPhotoUrl,
+    idPhotoBackUrl,
+    staffName
+  }) => {
+    const authorStaff = staffName || currentStaff?.name || 'Receptionist';
+    const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+
+    let targetGuestName = 'Guest';
+    const updatedGuests = (state.guests || SEED_GUESTS).map(g => {
+      if (g.id === guestId) {
+        targetGuestName = g.name;
+        return {
+          ...g,
+          id_proof_type: idType !== undefined ? idType : g.id_proof_type,
+          id_proof_number: idNumber !== undefined ? idNumber : g.id_proof_number,
+          id_proof_photo_url: idPhotoUrl !== undefined ? idPhotoUrl : g.id_proof_photo_url,
+          id_proof_back_photo_url: idPhotoBackUrl !== undefined ? idPhotoBackUrl : g.id_proof_back_photo_url,
+          id_verified_at: nowTimestamp,
+          id_verified_by_staff: authorStaff
+        };
+      }
+      return g;
+    });
+
     const auditEntry = logAudit(
-      'GST_CONFIG_UPDATE',
-      'Tax Settings',
-      `Owner updated GST tariff threshold to ₹${newConfig.slabThreshold}, standard rate to ${newConfig.standardRate}%, luxury rate to ${newConfig.luxuryRate}%`
+      'GUEST_ID_UPDATED',
+      `Guest ${targetGuestName}`,
+      `ID Proof updated (${idType || 'Govt ID'}). Front photo: ${idPhotoUrl ? 'Attached' : 'Unchanged'}, Back: ${idPhotoBackUrl ? 'Attached' : 'None'}. Verified by ${authorStaff}.`
     );
 
     setState(prev => ({
       ...prev,
-      gstConfig: {
-        ...(prev.gstConfig || DEFAULT_GST_CONFIG),
-        ...newConfig
-      },
+      guests: updatedGuests,
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
+  };
+
+  // 10. GST Config & Property Tax Identity
+  const updateGSTConfig = (newConfig) => {
+    const cleanGSTIN = newConfig.gstNumber !== undefined ? newConfig.gstNumber.trim().toUpperCase() : null;
+    const auditDetails = `Owner updated GST settings: GSTIN=${cleanGSTIN || 'Unchanged'}, Standard=${newConfig.standardRate || 12}%, Luxury=${newConfig.luxuryRate || 18}%, Threshold=₹${newConfig.slabThreshold || 7500}`;
+
+    const auditEntry = logAudit(
+      'GST_CONFIG_UPDATE',
+      'Tax Settings',
+      auditDetails
+    );
+
+    setState(prev => {
+      const updatedProperties = (prev.properties || []).map(p => {
+        if (p.id === prev.activePropertyId) {
+          return {
+            ...p,
+            gst_number: cleanGSTIN !== null ? cleanGSTIN : p.gst_number,
+            legal_entity: newConfig.legalEntity || p.legal_entity || p.name
+          };
+        }
+        return p;
+      });
+
+      return {
+        ...prev,
+        properties: updatedProperties,
+        gstConfig: {
+          ...(prev.gstConfig || DEFAULT_GST_CONFIG),
+          ...newConfig,
+          gstNumber: cleanGSTIN !== null ? cleanGSTIN : (prev.gstConfig?.gstNumber || prev.property?.gst_number || '')
+        },
+        auditLogs: [auditEntry, ...(prev.auditLogs || [])]
+      };
+    });
   };
 
   // Stats Computations
@@ -981,6 +1049,7 @@ export function usePMSStore() {
       closeShiftHandover,
       addGuestSelfCheckin,
       confirmSelfCheckin,
+      updateGuestIdProof,
       updateGSTConfig,
       logAudit
     }

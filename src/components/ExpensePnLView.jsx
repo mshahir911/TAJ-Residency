@@ -17,7 +17,8 @@ export default function ExpensePnLView({
   expenses = [],
   stats,
   onAddExpense,
-  property
+  property,
+  onBackToGrid
 }) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [category, setCategory] = useState('supplies');
@@ -74,14 +75,24 @@ export default function ExpensePnLView({
           </p>
         </div>
 
-        {/* Add Expense Button */}
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-brass text-ink font-bold text-xs hover:brightness-110 shadow-lg shadow-brass/20 active:scale-95 transition-all flex items-center gap-2 font-mono"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Quick Log Expense</span>
-        </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {onBackToGrid && (
+            <button
+              onClick={onBackToGrid}
+              className="px-3.5 py-2.5 rounded-xl bg-panel-raised border border-brass-soft/40 text-slate-300 hover:text-white font-bold text-xs font-mono transition-all"
+            >
+              ← Room Grid
+            </button>
+          )}
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-brass text-ink font-bold text-xs hover:brightness-110 shadow-lg shadow-brass/20 active:scale-95 transition-all flex items-center gap-2 font-mono"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Quick Log Expense</span>
+          </button>
+        </div>
       </div>
 
       {/* P&L Financial Summary Cards */}

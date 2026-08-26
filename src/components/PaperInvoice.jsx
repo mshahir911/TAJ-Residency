@@ -1,5 +1,5 @@
-import React from 'react';
-import { X, Printer, ShieldCheck, Download, Tag } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { X, Printer, ShieldCheck, Download, Tag, ArrowLeft, MessageSquare, CheckCircle2, FileText } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatCurrency } from '../utils/formatters';
 import TajLogo from './TajLogo';
@@ -11,16 +11,43 @@ export default function PaperInvoice({
   booking,
   guest,
   invoice,
-  property
+  property,
+  gstConfig
 }) {
-  if (!isOpen || !room) return null;
+  // Esc key listener for back-navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
-  const invoiceNo = invoice?.id || `TR/INV/${room.room_number}/${Math.floor(1000 + Math.random() * 9000)}`;
+  if (!isOpen || (!room && !invoice)) return null;
+
+  const rawGstin = property?.gst_number || gstConfig?.gstNumber || '';
+  const hasGstin = Boolean(rawGstin && rawGstin.trim().length >= 6);
+  const gstinDisplay = hasGstin ? rawGstin.trim().toUpperCase() : 'GST number not configured';
+  const sacCode = gstConfig?.sacCode || '996311';
+  const legalEntity = gstConfig?.legalEntity || property?.legal_entity || property?.name || 'Taj Residency';
+
+  const roomNum = invoice?.room_number || room?.room_number || 'Room';
+  const invoiceNo = invoice?.id || `TR/INV/${roomNum}/${Math.floor(1000 + Math.random() * 9000)}`;
   const invoiceDate = invoice?.paid_at || new Date().toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
   });
+
+  const guestName = guest?.name || invoice?.guest_name || 'Valued Guest';
+  const guestPhone = guest?.phone || invoice?.guest_phone || '+91 98470 11223';
+  const guestAddress = guest?.address || invoice?.guest_address || 'Kozhikode, Kerala';
+  const guestIdProof = guest?.id_proof_type || invoice?.id_proof_type || 'Aadhaar Card';
+  const guestIdNumber = guest?.id_proof_number || invoice?.id_proof_number || 'VERIFIED';
 
   const nights = invoice?.nights || booking?.nights || 1;
   const rateApplied = invoice?.rate_applied || booking?.rate_applied || 2000;
@@ -41,27 +68,154 @@ export default function PaperInvoice({
     window.print();
   };
 
+  // Direct File Download (Self-contained printable HTML invoice file)
+  const handleSaveDirectFile = () => {
+    const invoiceElement = document.getElementById('printable-tax-invoice');
+    const invoiceHtml = invoiceElement ? invoiceElement.outerHTML : '';
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GST Tax Invoice - ${invoiceNo} - ${property?.name || 'Taj Residency'}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #F4F6F9;
+      color: #11161D;
+      margin: 0;
+      padding: 24px;
+    }
+    .invoice-wrapper {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #F2EFE6;
+      border: 1px solid #D5D0C2;
+      border-radius: 12px;
+      padding: 36px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .invoice-wrapper { border: none; box-shadow: none; padding: 0; background: #fff; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-wrapper">
+    ${invoiceHtml}
+  </div>
+</body>
+</html>`;
+
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    const safeGuest = guestName.replace(/[^a-zA-Z0-9]/g, '_');
+    const safeInv = invoiceNo.replace(/[^a-zA-Z0-9]/g, '_');
+    downloadLink.href = url;
+    downloadLink.download = `Taj_Residency_Invoice_Room${roomNum}_${safeGuest}_${safeInv}.html`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+  };
+
+  // WhatsApp Billing Summary Share
+  const handleShareWhatsApp = () => {
+    const hotelName = property?.name || 'Taj Residency';
+    const msg = `🏛️ *${hotelName.toUpperCase()} — TAX INVOICE & RECEIPT*
+Invoice No: *${invoiceNo}*
+Room: *${roomNum} (${invoice?.ac_or_non_ac || 'AC'})*
+
+Dear *${guestName}*,
+Thank you for staying at Taj Residency, Kozhikode. Here is your final tax invoice summary:
+
+📋 *Gross Tariff (${nights} Days @ ₹${rateApplied}):* ₹${grossRoomCharge.toLocaleString('en-IN')}
+${discountAmount > 0 ? `🏷️ *Discount / Concession:* -₹${discountAmount.toLocaleString('en-IN')} (${discountReason})\n` : ''}📊 *Taxable Value:* ₹${taxableRoomCharge.toLocaleString('en-IN')}
+📊 *GST (CGST 6% + SGST 6%):* ₹${gstAmount.toLocaleString('en-IN')}
+💰 *Total Bill (GST Inc.):* ₹${grandTotal.toLocaleString('en-IN')}
+💳 *Advance Received:* ₹${advancePaid.toLocaleString('en-IN')}
+✅ *Final Balance Settled (${paymentMode}):* ₹${balanceSettled.toLocaleString('en-IN')}
+
+GSTIN: ${property?.gst_number || '32AABCT9988Q1Z4'}
+SAC Code: 996311 (Hotel Accommodation)
+
+_Thank you for choosing Taj Residency!_`;
+
+    const cleanPhone = (guestPhone || '').replace(/[^0-9]/g, '');
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay overflow-y-auto">
-      <div className="bg-white text-[#11161D] rounded-xl w-full max-w-3xl overflow-hidden shadow-2xl my-6 flex flex-col font-sans">
-        {/* Screen Top Controls (Excluded during Print) */}
-        <div className="p-3 bg-panel border-b border-brass-soft/30 flex items-center justify-between no-print text-white">
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="w-2 h-2 rounded-full bg-signal-green"></span>
-            <span>Paper Palette GST Invoice Preview (#F2EFE6)</span>
+    <div className="fixed inset-0 z-50 overflow-y-auto modal-overlay flex flex-col items-center justify-start p-2 sm:p-6 backdrop-blur-md bg-black/80 animate-in fade-in duration-200">
+      <div className="bg-white text-[#11161D] rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl my-3 sm:my-6 flex flex-col font-sans border border-brass/40 relative">
+        
+        {/* Sticky Top Glassmorphism Control Bar (Always Accessible) */}
+        <div className="sticky top-0 z-30 p-3 sm:p-4 bg-[#0E1420]/95 backdrop-blur-xl border-b border-brass/40 flex items-center justify-between no-print text-white shadow-xl gap-2 flex-wrap rounded-t-2xl">
+          
+          {/* Left: Prominent Back Button & Status */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-panel hover:bg-ink text-brass hover:text-white border border-brass/50 font-mono font-bold text-xs transition-all active:scale-95 shadow-md cursor-pointer"
+              title="Return to Room Grid (Esc)"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+              <span>Back to Rooms</span>
+            </button>
+
+            <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-signal-green animate-pulse"></span>
+              <span className="font-bold text-brass">GST Invoice Ready</span>
+              <span className="text-slate-400">• Room {roomNum}</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right: Save Direct File, Print / PDF, WhatsApp, Close */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Save Direct File Option */}
             <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brass text-ink font-bold text-xs hover:brightness-110 shadow-md transition-all"
+              type="button"
+              onClick={handleSaveDirectFile}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-panel hover:bg-ink text-slate-200 hover:text-white border border-brass-soft/50 font-mono font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+              title="Save standalone offline invoice file to device"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print / Export PDF</span>
+              <Download className="w-3.5 h-3.5 text-brass" />
+              <span>Save File</span>
             </button>
+
+            {/* Print / PDF Option */}
             <button
+              type="button"
+              onClick={handlePrint}
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-xl bg-brass hover:bg-brass-light text-ink font-mono font-black text-xs shadow-lg shadow-brass/25 transition-all active:scale-95 cursor-pointer border border-brass-light"
+              title="Print Tax Invoice or Save as PDF"
+            >
+              <Printer className="w-4 h-4 stroke-[2.5]" />
+              <span>Print / PDF</span>
+            </button>
+
+            {/* WhatsApp Share Option */}
+            <button
+              type="button"
+              onClick={handleShareWhatsApp}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-signal-green/20 hover:bg-signal-green text-signal-green hover:text-ink border border-signal-green/40 font-mono font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+              title="Share invoice summary via WhatsApp"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+            </button>
+
+            {/* Close Button */}
+            <button
+              type="button"
               onClick={onClose}
-              className="w-7 h-7 rounded-lg bg-panel-raised hover:bg-ink text-slate-400 hover:text-white flex items-center justify-center border border-brass-soft/30"
+              className="w-8 h-8 rounded-xl bg-panel hover:bg-ink text-slate-400 hover:text-white flex items-center justify-center border border-brass-soft/30 transition-colors cursor-pointer"
+              title="Close (Esc)"
             >
               <X className="w-4 h-4" />
             </button>
@@ -69,7 +223,7 @@ export default function PaperInvoice({
         </div>
 
         {/* Printable Canvas */}
-        <div className="p-8 sm:p-12 space-y-6 bg-[#F2EFE6] paper-surface" id="printable-tax-invoice">
+        <div className="p-6 sm:p-12 space-y-6 bg-[#F2EFE6] paper-surface" id="printable-tax-invoice">
           {/* Header */}
           <div className="flex items-start justify-between border-b-2 border-[#11161D] pb-5">
             <div>
@@ -77,16 +231,22 @@ export default function PaperInvoice({
                 <TajLogo size={46} />
                 <div>
                   <h1 className="font-display font-bold text-2xl tracking-wide uppercase text-[#0B0F14]">
-                    {property?.name || 'Taj Residency'}
+                    {legalEntity}
                   </h1>
                   <p className="text-xs text-[#7A6B3E] font-semibold">
-                    📍 Adivaram, Kozhikode • Tel: +91 99617 01414
+                    📍 {property?.address || 'Adivaram, Kozhikode'} • Tel: {property?.phone || '+91 99617 01414'}
                   </p>
                 </div>
               </div>
 
               <div className="mt-3 text-xs font-mono space-y-0.5 text-slate-700">
-                <div>GSTIN: <span className="font-bold text-black">{property?.gst_number || '32AABCT9988Q1Z4'}</span> | State: Kerala (32)</div>
+                <div>
+                  GSTIN:{' '}
+                  <span className={`font-bold ${hasGstin ? 'text-black' : 'text-amber-700 italic'}`}>
+                    {gstinDisplay}
+                  </span>
+                  {' '}| State: {property?.state || 'Kerala'} (32)
+                </div>
                 <div>Address: {property?.address || 'Beach Road, Mananchira, Kozhikode - 673032'}</div>
               </div>
             </div>
@@ -98,7 +258,7 @@ export default function PaperInvoice({
               <div className="mt-2 text-xs font-mono space-y-0.5">
                 <div><span className="text-slate-500">Invoice No:</span> <span className="font-bold">{invoiceNo}</span></div>
                 <div><span className="text-slate-500">Date:</span> {invoiceDate}</div>
-                <div><span className="text-slate-500">Room:</span> <span className="font-bold">{room.room_number} ({booking?.ac_or_non_ac || 'AC'})</span></div>
+                <div><span className="text-slate-500">Room:</span> <span className="font-bold">{roomNum} ({invoice?.ac_or_non_ac || booking?.ac_or_non_ac || 'AC'})</span></div>
               </div>
             </div>
           </div>
@@ -151,7 +311,7 @@ export default function PaperInvoice({
             <tbody className="divide-y divide-[#D5D0C2]">
               <tr>
                 <td className="p-2 text-slate-500">1</td>
-                <td className="p-2 text-slate-600">996311</td>
+                <td className="p-2 text-slate-600">{sacCode}</td>
                 <td className="p-2 font-sans font-medium text-black">
                   Room Accommodation ({room.room_type_id === 'deluxe' ? 'Deluxe Room' : 'Classic Room'} - {booking?.ac_or_non_ac || 'AC'})
                 </td>
@@ -251,6 +411,39 @@ export default function PaperInvoice({
               <div className="w-36 border-b border-black mb-1"></div>
               <span className="text-[10px] text-slate-600 uppercase font-bold">Authorized Signatory</span>
             </div>
+          </div>
+        </div>
+
+        {/* Sticky Bottom Glassmorphic Action Footer (Always Visible while Scrolling) */}
+        <div className="sticky bottom-0 z-30 p-3 sm:p-4 bg-[#0E1420]/95 backdrop-blur-xl border-t border-brass/40 flex items-center justify-between no-print text-white shadow-2xl rounded-b-2xl gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-panel hover:bg-ink text-brass hover:text-white border border-brass/50 font-mono font-bold text-xs transition-all active:scale-95 shadow-md cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+            <span>Back to Rooms</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSaveDirectFile}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-panel hover:bg-ink text-slate-200 hover:text-white border border-brass-soft/50 font-mono font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+              title="Save offline invoice file to device"
+            >
+              <Download className="w-3.5 h-3.5 text-brass" />
+              <span>Save File</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="flex items-center gap-1.5 px-4 sm:px-6 py-2 rounded-xl bg-brass hover:bg-brass-light text-ink font-mono font-black text-xs sm:text-sm shadow-xl shadow-brass/30 transition-all active:scale-95 cursor-pointer border border-brass-light"
+            >
+              <Printer className="w-4 h-4 stroke-[2.5]" />
+              <span>Print / Save PDF</span>
+            </button>
           </div>
         </div>
       </div>

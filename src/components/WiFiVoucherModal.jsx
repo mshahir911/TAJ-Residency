@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X, Wifi, Printer, Share2, ShieldCheck, Key, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import TajLogo from './TajLogo';
@@ -10,6 +10,19 @@ export default function WiFiVoucherModal({
   booking,
   property
 }) {
+  // Esc key listener for back-navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !room) return null;
 
   const wifiCode = room.wifi_voucher_code || `TR-WIFI-${room.room_number}-77X9`;

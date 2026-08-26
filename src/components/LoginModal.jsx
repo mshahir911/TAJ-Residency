@@ -21,8 +21,6 @@ export default function LoginModal({
   onLoginStaff,
   property
 }) {
-  if (!isOpen) return null;
-
   const [inputIdentifier, setInputIdentifier] = useState('');
   const [inputPin, setInputPin] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -49,6 +47,8 @@ export default function LoginModal({
       onClose();
     }, 900);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay animate-in fade-in duration-200">

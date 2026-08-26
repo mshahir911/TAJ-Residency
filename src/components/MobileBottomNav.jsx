@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutGrid,
   FileSpreadsheet,
@@ -16,8 +16,12 @@ import {
   Lock,
   LogOut,
   X,
-  ChevronRight
+  ChevronRight,
+  Percent,
+  Moon,
+  Sun
 } from 'lucide-react';
+import { getInitialTheme, applyTheme } from '../utils/theme';
 
 export default function MobileBottomNav({
   activeTab,
@@ -25,6 +29,7 @@ export default function MobileBottomNav({
   onOpenWalkIn,
   onOpenSearch,
   onOpenStaffAdmin,
+  onOpenGSTSettings,
   onSignOut,
   dirtyCount = 0,
   property = {},
@@ -32,6 +37,23 @@ export default function MobileBottomNav({
   currentRole = 'desk'
 }) {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  // Sync theme changes
+  useEffect(() => {
+    const handleThemeChange = (e) => {
+      if (e.detail?.theme) {
+        setTheme(e.detail.theme);
+      }
+    };
+    window.addEventListener('taj-theme-change', handleThemeChange);
+    return () => window.removeEventListener('taj-theme-change', handleThemeChange);
+  }, []);
+
+  const handleSetTheme = (newTheme) => {
+    applyTheme(newTheme);
+    setTheme(newTheme);
+  };
 
   // Housekeeping role has a simpler set of bottom tabs
   if (currentRole === 'housekeeping') {
@@ -218,6 +240,45 @@ export default function MobileBottomNav({
               </kbd>
             </button>
 
+            {/* Theme Mode Selector in Mobile Drawer */}
+            <div className="bg-ink p-3 rounded-2xl border border-brass-soft/30 space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                  {theme === 'dark' ? <Moon className="w-3.5 h-3.5 text-brass" /> : <Sun className="w-3.5 h-3.5 text-signal-amber" />}
+                  <span>App Theme</span>
+                </span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${theme === 'dark' ? 'text-brass' : 'text-signal-amber'}`}>
+                  {theme === 'dark' ? 'Dark (Night Desk)' : 'White (Day Mode)'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSetTheme('dark')}
+                  className={`py-2 px-3 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                    theme === 'dark'
+                      ? 'bg-brass text-ink shadow-md shadow-brass/20'
+                      : 'bg-panel border border-brass-soft/30 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Moon className="w-3.5 h-3.5" />
+                  <span>Dark Mode</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetTheme('light')}
+                  className={`py-2 px-3 rounded-xl font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                    theme === 'light'
+                      ? 'bg-brass text-ink shadow-md shadow-brass/20'
+                      : 'bg-panel border border-brass-soft/30 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Sun className="w-3.5 h-3.5" />
+                  <span>White Mode</span>
+                </button>
+              </div>
+            </div>
+
             {/* Drawer Options List */}
             <div className="space-y-1.5">
               <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400 px-1">
@@ -342,6 +403,27 @@ export default function MobileBottomNav({
                       <div className="text-left">
                         <div className="text-xs font-bold text-white">Monthly P&L & Expenses</div>
                         <div className="text-[10px] text-slate-400 font-mono">Ledger & profit margins</div>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMoreOpen(false);
+                      if (onOpenGSTSettings) {
+                        onOpenGSTSettings();
+                      }
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-ink/70 text-slate-300 border border-brass-soft/20 hover:border-brass-soft/40 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-brass/10 border border-brass/30 flex items-center justify-center text-brass">
+                        <Percent className="w-4 h-4" />
+                      </div>
+                      <div className="text-left">
+                        <div className="text-xs font-bold text-white">GST & Tax Slabs</div>
+                        <div className="text-[10px] text-slate-400 font-mono">SAC 996311 & Rates</div>
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-400" />

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutGrid,
   UserPlus,
@@ -14,9 +14,13 @@ import {
   Tag,
   Building2,
   Lock,
-  LogOut
+  LogOut,
+  Percent,
+  Moon,
+  Sun
 } from 'lucide-react';
 import TajLogo from './TajLogo';
+import { getInitialTheme, toggleTheme } from '../utils/theme';
 
 export default function NavigationRail({
   activeTab,
@@ -24,12 +28,29 @@ export default function NavigationRail({
   onOpenWalkIn,
   onOpenSearch,
   onOpenStaffAdmin,
+  onOpenGSTSettings,
   onSignOut,
   dirtyCount,
   property,
   currentStaff,
-  currentRole
+  currentRole = 'desk'
 }) {
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  useEffect(() => {
+    const handleThemeChange = (e) => {
+      if (e.detail?.theme) {
+        setTheme(e.detail.theme);
+      }
+    };
+    window.addEventListener('taj-theme-change', handleThemeChange);
+    return () => window.removeEventListener('taj-theme-change', handleThemeChange);
+  }, []);
+
+  const handleToggleTheme = () => {
+    const newTheme = toggleTheme(theme);
+    setTheme(newTheme);
+  };
   let navItems = [];
 
   if (currentRole === 'housekeeping') {
@@ -43,6 +64,7 @@ export default function NavigationRail({
       { id: 'guests', label: 'Guest Directory & CRM', icon: Users, shortcut: 'U' },
       { id: 'analytics', label: 'Owner Analytics & Yield', icon: TrendingUp, shortcut: 'O' },
       { id: 'pl', label: 'Monthly P&L & Expenses', icon: Wallet, shortcut: 'P' },
+      { id: 'gst', label: 'GST & Tax Settings', icon: Percent, shortcut: 'T' },
       { id: 'overrides', label: 'Seasonal Rate Overrides', icon: Tag, shortcut: 'R' },
       { id: 'staff', label: 'Staff Admin & PINs', icon: Users, shortcut: 'S' },
       { id: 'audit', label: 'Operations Audit Trail', icon: ShieldCheck, shortcut: 'A' },
@@ -116,6 +138,8 @@ export default function NavigationRail({
                 onClick={() => {
                   if (item.id === 'staff') {
                     onOpenStaffAdmin();
+                  } else if (item.id === 'gst') {
+                    onOpenGSTSettings();
                   } else {
                     setActiveTab(item.id);
                   }
@@ -184,13 +208,28 @@ export default function NavigationRail({
             </div>
           </div>
 
-          <button
-            onClick={onSignOut}
-            className="p-1.5 rounded-lg bg-ink hover:bg-signal-red/20 text-slate-400 hover:text-signal-red border border-brass-soft/30 transition-colors"
-            title="Lock Counter / Sign Out"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              className="p-1.5 rounded-lg bg-ink hover:bg-panel text-slate-400 hover:text-brass border border-brass-soft/30 transition-all active:scale-95"
+              title={theme === 'dark' ? "Switch to White Theme" : "Switch to Dark Theme"}
+            >
+              {theme === 'dark' ? (
+                <Moon className="w-4 h-4 text-brass" />
+              ) : (
+                <Sun className="w-4 h-4 text-signal-amber" />
+              )}
+            </button>
+
+            <button
+              onClick={onSignOut}
+              className="p-1.5 rounded-lg bg-ink hover:bg-signal-red/20 text-slate-400 hover:text-signal-red border border-brass-soft/30 transition-colors active:scale-95"
+              title="Lock Counter / Sign Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Dirty Rooms Counter */}
