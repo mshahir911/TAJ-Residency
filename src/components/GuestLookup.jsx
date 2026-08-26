@@ -13,7 +13,8 @@ import {
   Camera,
   CheckCircle2,
   AlertTriangle,
-  X
+  X,
+  Folder
 } from 'lucide-react';
 import { formatCurrency } from '../utils/formatters';
 import IdPhotoCaptureWidget from './IdPhotoCaptureWidget';
@@ -22,6 +23,7 @@ export default function GuestLookup({
   guests = [],
   onNewBookingForGuest,
   onViewGuestIdDoc,
+  onViewGuestDossier,
   onUpdateGuestId
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -280,15 +282,25 @@ export default function GuestLookup({
               </div>
 
               {/* Action Buttons Row */}
-              <div className="pt-2 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5">
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-brass-soft/20">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onViewGuestDossier && onViewGuestDossier(guest)}
+                    className="px-2.5 py-1.5 rounded-lg bg-panel hover:bg-ink text-brass border border-brass-soft/50 font-mono font-bold text-xs flex items-center gap-1 transition-all shadow-sm"
+                    title="View complete stay history, past rooms, and invoices folder"
+                  >
+                    <Folder className="w-3.5 h-3.5 text-brass" />
+                    <span>Stay History ({guest.total_stays || 1})</span>
+                  </button>
+
                   {hasIdPhoto && (
                     <button
                       type="button"
                       onClick={() => onViewGuestIdDoc && onViewGuestIdDoc(guest)}
-                      className="px-2.5 py-1.5 rounded-lg bg-panel hover:bg-ink text-brass border border-brass-soft/40 font-mono font-bold text-xs flex items-center gap-1 transition-all"
+                      className="px-2.5 py-1.5 rounded-lg bg-panel hover:bg-ink text-slate-300 hover:text-white border border-brass-soft/30 font-mono text-xs flex items-center gap-1 transition-all"
                     >
-                      <Eye className="w-3.5 h-3.5" />
+                      <Eye className="w-3.5 h-3.5 text-brass" />
                       <span>Inspect ID</span>
                     </button>
                   )}
@@ -297,7 +309,7 @@ export default function GuestLookup({
                     <button
                       type="button"
                       onClick={() => handleStartEditId(guest)}
-                      className="px-2.5 py-1.5 rounded-lg bg-panel hover:bg-ink text-slate-300 hover:text-white border border-brass-soft/40 font-mono text-xs flex items-center gap-1 transition-all"
+                      className="px-2.5 py-1.5 rounded-lg bg-panel hover:bg-ink text-slate-300 hover:text-white border border-brass-soft/30 font-mono text-xs flex items-center gap-1 transition-all"
                     >
                       <Camera className="w-3.5 h-3.5 text-brass" />
                       <span>{hasIdPhoto ? 'Update ID' : 'Capture ID Photo'}</span>
@@ -308,10 +320,10 @@ export default function GuestLookup({
                 <button
                   type="button"
                   onClick={() => onNewBookingForGuest(guest)}
-                  className="px-4 py-1.5 rounded-lg bg-brass text-ink font-bold text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shadow"
+                  className="px-3.5 py-1.5 rounded-lg bg-brass text-ink font-bold text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shadow"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
-                  <span>Fast Book for {guest.name.split(' ')[0]}</span>
+                  <span>Fast Check-In (2 Steps)</span>
                 </button>
               </div>
             </div>

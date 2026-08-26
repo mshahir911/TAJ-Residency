@@ -25,6 +25,7 @@ import StaffManagementModal from './components/StaffManagementModal';
 import IdDocumentViewerModal from './components/IdDocumentViewerModal';
 import GSTSettingsModal from './components/GSTSettingsModal';
 import DatabaseSettingsModal from './components/DatabaseSettingsModal';
+import GuestDossierModal from './components/GuestDossierModal';
 
 export default function App() {
   const store = usePMSStore();
@@ -39,6 +40,10 @@ export default function App() {
   // Modals state
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
   const [walkInSelectedRoom, setWalkInSelectedRoom] = useState(null);
+  const [walkInSelectedGuest, setWalkInSelectedGuest] = useState(null);
+
+  const [isDossierOpen, setIsDossierOpen] = useState(false);
+  const [dossierGuest, setDossierGuest] = useState(null);
 
   const [isFolioOpen, setIsFolioOpen] = useState(false);
   const [folioSelectedRoom, setFolioSelectedRoom] = useState(null);
@@ -144,9 +149,15 @@ export default function App() {
   };
 
   // HANDLERS
-  const handleOpenWalkIn = (room = null) => {
+  const handleOpenWalkIn = (room = null, guest = null) => {
     setWalkInSelectedRoom(room);
+    setWalkInSelectedGuest(guest);
     setIsWalkInOpen(true);
+  };
+
+  const handleViewGuestDossier = (guest) => {
+    setDossierGuest(guest);
+    setIsDossierOpen(true);
   };
 
   const handleOpenCheckout = (room) => {
@@ -241,6 +252,7 @@ export default function App() {
             onOpenOnboarding={() => setIsOnboardingModalOpen(true)}
             onOpenDatabaseModal={() => setIsDatabaseModalOpen(true)}
             isOnline={store.isOnline}
+            syncStatus={store.syncStatus}
             stats={store.stats}
             onOpenWalkIn={() => handleOpenWalkIn(null)}
             onOpenShiftHandover={() => setIsShiftModalOpen(true)}
@@ -294,10 +306,9 @@ export default function App() {
                 guests={store.guests}
                 bookings={store.bookings}
                 rooms={store.rooms}
-                onNewBookingForGuest={(g) => {
-                  handleOpenWalkIn(null);
-                }}
+                onNewBookingForGuest={(g) => handleOpenWalkIn(null, g)}
                 onViewGuestIdDoc={handleViewGuestIdDoc}
+                onViewGuestDossier={handleViewGuestDossier}
                 onUpdateGuestId={store.actions.updateGuestIdProof}
               />
             )}
@@ -375,9 +386,14 @@ export default function App() {
       {isWalkInOpen && (
         <WalkInModal
           isOpen={isWalkInOpen}
-          onClose={() => setIsWalkInOpen(false)}
+          onClose={() => {
+            setIsWalkInOpen(false);
+            setWalkInSelectedGuest(null);
+          }}
           rooms={store.rooms}
+          guests={store.guests}
           selectedRoom={walkInSelectedRoom}
+          preselectedGuest={walkInSelectedGuest}
           onSaveBooking={handleSaveBooking}
           onLookupPhone={store.actions.findGuestByPhone}
           onCalculateGST={store.actions.calculateGST}
@@ -542,6 +558,26 @@ export default function App() {
           isOpen={isDatabaseModalOpen}
           onClose={() => setIsDatabaseModalOpen(false)}
           property={store.property}
+          syncStatus={store.syncStatus}
+          onForceSync={store.actions.forceSyncNow}
+        />
+      )}
+
+      {/* 14. Digital Guest Stay Dossier & Folder Modal */}
+      {isDossierOpen && dossierGuest && (
+        <GuestDossierModal
+          isOpen={isDossierOpen}
+          onClose={() => setIsDossierOpen(false)}
+          guest={dossierGuest}
+          bookings={store.bookings}
+          invoices={store.invoices}
+          rooms={store.rooms}
+          onOpenWalkInForGuest={(g) => handleOpenWalkIn(null, g)}
+          onViewGuestIdDoc={handleViewGuestIdDoc}
+          onViewInvoice={(inv) => {
+            setCurrentInvoice(inv);
+            setIsPaperInvoiceOpen(true);
+          }}
         />
       )}
     </div>

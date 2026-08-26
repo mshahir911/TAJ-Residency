@@ -1,16 +1,46 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://demo-taj-residency.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.demo-key';
+const getStoredConfig = () => {
+  if (typeof window === 'undefined') return { url: '', key: '' };
+  try {
+    return {
+      url: localStorage.getItem('taj_custom_supabase_url') || '',
+      key: localStorage.getItem('taj_custom_supabase_key') || ''
+    };
+  } catch (e) {
+    return { url: '', key: '' };
+  }
+};
+
+const stored = getStoredConfig();
+
+export const supabaseUrl = stored.url || import.meta.env.VITE_SUPABASE_URL || 'https://demo-taj-residency.supabase.co';
+export const supabaseAnonKey = stored.key || import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.demo-key';
 
 export const isSupabaseConfigured = Boolean(
-  import.meta.env.VITE_SUPABASE_URL && 
-  import.meta.env.VITE_SUPABASE_URL !== 'https://demo-taj-residency.supabase.co'
+  (stored.url && stored.key) ||
+  (import.meta.env.VITE_SUPABASE_URL && 
+   import.meta.env.VITE_SUPABASE_URL !== 'https://demo-taj-residency.supabase.co')
 );
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export let supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true
   }
 });
+
+export function saveCustomSupabaseConfig(url, key) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (url && key) {
+      localStorage.setItem('taj_custom_supabase_url', url.trim());
+      localStorage.setItem('taj_custom_supabase_key', key.trim());
+    } else {
+      localStorage.removeItem('taj_custom_supabase_url');
+      localStorage.removeItem('taj_custom_supabase_key');
+    }
+  } catch (e) {
+    console.error('Storage save error:', e);
+  }
+}

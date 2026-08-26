@@ -95,7 +95,7 @@ export default function IdDocumentViewerModal({
       <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl shadow-black/90 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[92vh]">
         
         {/* Header with Mobile Back Button & Safe Area */}
-        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+        <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3.5 bg-panel border-b border-brass-soft/30 flex items-center justify-between modal-header-safe">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
@@ -257,6 +257,18 @@ export default function IdDocumentViewerModal({
             </div>
           </div>
         )}
+
+        {/* Mobile-Friendly Sticky Bottom Bar for Easy Thumb Access */}
+        <div className="sm:hidden p-3 bg-panel border-t border-brass-soft/30 pb-safe-mobile flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-3 rounded-xl bg-brass text-ink font-mono font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-98"
+          >
+            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+            <span>Close ID Document & Return</span>
+          </button>
+        </div>
       </div>
     </div>
   );

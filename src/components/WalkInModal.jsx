@@ -21,7 +21,10 @@ import {
   ArrowLeft,
   ArrowRight,
   User,
-  Coins
+  Coins,
+  ChevronDown,
+  ChevronUp,
+  UserPlus
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ROOM_TYPES } from '../types/data';
@@ -32,8 +35,10 @@ export default function WalkInModal({
   isOpen,
   onClose,
   rooms = [],
+  guests = [],
   selectedRoom: propSelectedRoom,
   preselectedRoom,
+  preselectedGuest = null,
   onSaveBooking,
   onSubmit,
   onLookupPhone,
@@ -46,8 +51,8 @@ export default function WalkInModal({
   const vacantRooms = rooms.filter(r => r.status === 'vacant' || r.status === 'ready' || r.status === 'reserved');
   const targetInitial = propSelectedRoom || preselectedRoom || vacantRooms[0] || rooms[0] || { id: 'room-202', room_number: '202', room_type_id: 'classic' };
 
-  const [step, setStep] = useState(1); // 1: Stay & Room, 2: Guest Info, 3: ID Capture, 4: Payment
-  const [isAllInOne, setIsAllInOne] = useState(false); // Toggle between 4-Step Guided vs 1-Page Rapid
+  const [step, setStep] = useState(1);
+  const [isAllInOne, setIsAllInOne] = useState(false);
 
   const [roomId, setRoomId] = useState(targetInitial?.id || '');
   const selectedRoom = rooms.find(r => r.id === roomId) || targetInitial;
@@ -73,25 +78,45 @@ export default function WalkInModal({
   const [advancePaid, setAdvancePaid] = useState(1000);
   const [paymentMode, setPaymentMode] = useState('Cash');
 
-  // Guest details (with returning-guest phone prefill)
-  const [phone, setPhone] = useState('');
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [idType, setIdType] = useState('Aadhaar Card');
-  const [idNumber, setIdNumber] = useState('');
-  const [idPhotoUrl, setIdPhotoUrl] = useState('');
-  const [idPhotoBackUrl, setIdPhotoBackUrl] = useState('');
-  const [notes, setNotes] = useState('');
-  const [returningGuestFound, setReturningGuestFound] = useState(null);
+  // Guest details
+  const [phone, setPhone] = useState(preselectedGuest?.phone || '');
+  const [name, setName] = useState(preselectedGuest?.name || '');
+  const [address, setAddress] = useState(preselectedGuest?.address || '');
+  const [idType, setIdType] = useState(preselectedGuest?.id_proof_type || 'Aadhaar Card');
+  const [idNumber, setIdNumber] = useState(preselectedGuest?.id_proof_number || '');
+  const [idPhotoUrl, setIdPhotoUrl] = useState(preselectedGuest?.id_proof_photo_url || '');
+  const [idPhotoBackUrl, setIdPhotoBackUrl] = useState(preselectedGuest?.id_proof_back_photo_url || '');
+  const [notes, setNotes] = useState(preselectedGuest?.notes || '');
+  const [returningGuestFound, setReturningGuestFound] = useState(preselectedGuest || null);
+  const [searchGuestInput, setSearchGuestInput] = useState('');
+  const [isEditDetailsOpen, setIsEditDetailsOpen] = useState(false);
 
   const phoneLookup = onLookupPhone || onFindGuestByPhone;
+
+  // Returning Guest Fast-Track determination
+  const isFastTrack = Boolean(returningGuestFound);
+
+  // Dynamic step structure: 2 Steps for Returning Guests (Room ➔ Payment), 4 Steps for New Guests
+  const stepsList = isFastTrack
+    ? [
+        { num: 1, label: 'Stay & Room', icon: Calendar },
+        { num: 2, label: 'Payment & Keys', icon: Coins }
+      ]
+    : [
+        { num: 1, label: 'Stay & Room', icon: Calendar },
+        { num: 2, label: 'Guest Info', icon: User },
+        { num: 3, label: 'ID Capture', icon: Camera },
+        { num: 4, label: 'Payment & Keys', icon: Coins }
+      ];
+
+  const totalSteps = stepsList.length;
 
   // Esc key listener for back-navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         if (step > 1 && !isAllInOne) {
-          setStep(prev => prev - 1);
+          handlePrevStep();
         } else {
           onClose();
         }
@@ -103,28 +128,43 @@ export default function WalkInModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, step, isAllInOne, onClose]);
 
+  // Handle manual or automatic guest selection
+  const applyGuestData = (guest) => {
+    if (!guest) return;
+    setReturningGuestFound(guest);
+    setName(guest.name || '');
+    setPhone(guest.phone || '');
+    setAddress(guest.address || '');
+    setIdType(guest.id_proof_type || 'Aadhaar Card');
+    setIdNumber(guest.id_proof_number || '');
+    setIdPhotoUrl(guest.id_proof_photo_url || '');
+    setIdPhotoBackUrl(guest.id_proof_back_photo_url || '');
+    setNotes(guest.notes || 'Returning guest');
+  };
+
+  const handleClearReturningGuest = () => {
+    setReturningGuestFound(null);
+    setName('');
+    setPhone('');
+    setAddress('');
+    setIdNumber('');
+    setIdPhotoUrl('');
+    setIdPhotoBackUrl('');
+    setSearchGuestInput('');
+    setStep(1);
+  };
+
   // Phone lookup effect
   useEffect(() => {
     if (phone && phone.length >= 8 && typeof phoneLookup === 'function') {
       const match = phoneLookup(phone);
       if (match) {
-        setReturningGuestFound(match);
-        setName(match.name || '');
-        setAddress(match.address || '');
-        setIdType(match.id_proof_type || 'Aadhaar Card');
-        setIdNumber(match.id_proof_number || '');
-        setIdPhotoUrl(match.id_proof_photo_url || '');
-        setIdPhotoBackUrl(match.id_proof_back_photo_url || '');
-        setNotes(match.notes || 'Returning guest');
-      } else {
-        setReturningGuestFound(null);
+        applyGuestData(match);
       }
-    } else {
-      setReturningGuestFound(null);
     }
   }, [phone, phoneLookup]);
 
-  // Live Rate & Calculation based on stayDays (1 Day, 2 Days, etc.)
+  // Live Rate & Calculation based on stayDays
   const rateResult = typeof getRateForRoom === 'function' 
     ? getRateForRoom(selectedRoom?.room_type_id, acOrNonAc) 
     : (acOrNonAc === 'AC' ? roomType.ac_rate : roomType.non_ac_rate);
@@ -138,24 +178,45 @@ export default function WalkInModal({
 
   const totalNights = Math.max(1, Number(stayDays) || 1);
 
-  const gstCalcFn = calculateGST || onCalculateGST;
-  const gstCalc = typeof gstCalcFn === 'function'
-    ? gstCalcFn(nightlyRate, totalNights)
+  // Auto-align default advance paid with calculated daily tariff
+  useEffect(() => {
+    if (nightlyRate > 0) {
+      setAdvancePaid(nightlyRate);
+    }
+  }, [nightlyRate]);
+
+  // GST Calculation
+  const gstFn = calculateGST || onCalculateGST;
+  const gstCalc = typeof gstFn === 'function'
+    ? gstFn(nightlyRate, totalNights)
     : {
-        gstRate: 12,
-        gstAmount: Math.round(nightlyRate * totalNights * 0.12),
-        totalRoomCharge: nightlyRate * totalNights,
-        grandTotal: Math.round(nightlyRate * totalNights * 1.12)
+        taxableRoomCharge: nightlyRate * totalNights,
+        gstRate: nightlyRate >= 2500 ? 12 : 0,
+        cgstRate: nightlyRate >= 2500 ? 6 : 0,
+        sgstRate: nightlyRate >= 2500 ? 6 : 0,
+        gstAmount: nightlyRate >= 2500 ? Math.round(nightlyRate * totalNights * 0.12) : 0,
+        grandTotal: nightlyRate >= 2500 ? Math.round(nightlyRate * totalNights * 1.12) : nightlyRate * totalNights
       };
 
-  const validateStep = (current) => {
-    if (current === 1) {
+  const validateStep = (currentStep) => {
+    if (isFastTrack) {
+      // In Fast-Track, step 1 is Stay & Room, step 2 is Payment
+      if (currentStep === 1) {
+        if (!roomId) {
+          alert('Please select a room for check-in');
+          return false;
+        }
+      }
+      return true;
+    }
+
+    // Normal 4-Step Validation
+    if (currentStep === 1) {
       if (!roomId) {
-        alert('Please select a room');
+        alert('Please select a room for check-in');
         return false;
       }
-    }
-    if (current === 2) {
+    } else if (currentStep === 2) {
       if (!phone || phone.trim().length < 8) {
         alert('Please enter a valid guest mobile number');
         return false;
@@ -171,7 +232,7 @@ export default function WalkInModal({
   const handleNextStep = (e) => {
     e?.preventDefault();
     if (validateStep(step)) {
-      setStep(prev => Math.min(4, prev + 1));
+      setStep(prev => Math.min(totalSteps, prev + 1));
     }
   };
 
@@ -183,7 +244,7 @@ export default function WalkInModal({
     e?.preventDefault();
     if (!name || !phone) {
       alert('Please fill guest name and mobile number');
-      setStep(2);
+      setStep(isFastTrack ? 1 : 2);
       return;
     }
 
@@ -225,13 +286,6 @@ export default function WalkInModal({
     onClose();
   };
 
-  const stepsList = [
-    { num: 1, label: 'Stay & Room', icon: Calendar },
-    { num: 2, label: 'Guest Info', icon: User },
-    { num: 3, label: 'ID Capture', icon: Camera },
-    { num: 4, label: 'Payment', icon: Coins }
-  ];
-
   if (!isOpen) return null;
 
   return (
@@ -239,9 +293,9 @@ export default function WalkInModal({
       <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/90 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[92vh]">
         
         {/* Modal Header with Mobile Back Button & Safe Area */}
-        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+        <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3.5 bg-panel border-b border-brass-soft/30 flex items-center justify-between modal-header-safe">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            {/* Dedicated Top Back Button (Always accessible on Mobile) */}
+            {/* Top Back Button */}
             <button
               type="button"
               onClick={() => {
@@ -252,7 +306,7 @@ export default function WalkInModal({
                 }
               }}
               className="flex items-center gap-1 py-1.5 px-2.5 rounded-lg bg-ink hover:bg-panel text-brass hover:text-white border border-brass-soft/40 font-mono text-xs font-bold transition-all shrink-0 active:scale-95"
-              title={step > 1 && !isAllInOne ? "Go back to previous step" : "Close modal and return to room grid"}
+              title={step > 1 && !isAllInOne ? "Go back to previous step" : "Close modal"}
             >
               <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
               <span className="text-xs">{step > 1 && !isAllInOne ? 'Back' : 'Close'}</span>
@@ -262,26 +316,23 @@ export default function WalkInModal({
               TR
             </div>
             <div className="min-w-0">
-              <h2 className="font-display font-bold text-white text-base sm:text-lg leading-tight truncate">
-                {isPreBooking ? 'Advance Reservation' : 'Walk-In Check-In'}
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="font-display font-bold text-white text-base sm:text-lg leading-tight truncate">
+                  {isPreBooking ? 'Advance Reservation' : (isFastTrack ? '⚡ Express Walk-In' : 'Walk-In Check-In')}
+                </h2>
+                {isFastTrack && (
+                  <span className="px-1.5 py-0.5 rounded bg-signal-green/20 text-signal-green text-[9px] font-mono font-bold border border-signal-green/30 shrink-0">
+                    FAST-TRACK (2 STEPS)
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
-                Room {selectedRoom?.room_number || '202'} • {isAllInOne ? '1-Page Mode' : `Step ${step} of 4`}
+                Room {selectedRoom?.room_number || '202'} • {isAllInOne ? '1-Page Mode' : `Step ${step} of ${totalSteps}`}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* 1-Page vs 4-Step Mode Toggle */}
-            <button
-              type="button"
-              onClick={() => setIsAllInOne(prev => !prev)}
-              className="text-[10px] font-mono px-2 py-1 rounded bg-panel text-slate-300 hover:text-white border border-brass-soft/30 transition-colors hidden xs:inline-block"
-              title="Toggle between Step-by-Step and 1-Page view"
-            >
-              {isAllInOne ? '📋 Steps' : '⚡ 1-Page'}
-            </button>
-
             {/* Walk-in vs Pre-booking toggle */}
             <div className="bg-ink p-0.5 sm:p-1 rounded-lg border border-brass-soft/40 flex text-[10px] font-mono shrink-0">
               <button
@@ -354,341 +405,481 @@ export default function WalkInModal({
           </div>
         )}
 
-        {/* Scrollable Form Container with Pinned Bottom Action Bar */}
+        {/* Form Container with Native Touch Scrolling */}
         <form
           id="walkin-booking-form"
-          onSubmit={step === 4 || isAllInOne ? handleSubmit : handleNextStep}
+          onSubmit={step === totalSteps || isAllInOne ? handleSubmit : handleNextStep}
           className="flex-1 min-h-0 flex flex-col overflow-hidden"
         >
-          {/* Scrollable Body with Native Touch Scrolling */}
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-scroll p-4 sm:p-5 space-y-4 text-xs">
           
-          {/* STEP 1: STAY DURATION & ROOM SELECTION */}
-          {(isAllInOne || step === 1) && (
-            <div className="space-y-4 animate-in fade-in">
-              {/* Room Selection & Climate Type Banner */}
-              <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                      Select Room
-                    </label>
-                    <select
-                      value={roomId}
-                      onChange={(e) => setRoomId(e.target.value)}
-                      className="bg-panel border border-brass-soft rounded-lg px-3 py-1.5 text-white font-mono font-bold text-sm focus:outline-none focus:border-brass"
-                    >
-                      {rooms.map(r => (
-                        <option key={r.id} value={r.id}>
-                          Room {r.room_number} (Floor {r.floor} • {r.status.toUpperCase()})
-                        </option>
-                      ))}
-                    </select>
+            {/* STEP 1: STAY DURATION & ROOM SELECTION */}
+            {(isAllInOne || step === 1) && (
+              <div className="space-y-4 animate-in fade-in">
+                {/* Returning Guest Quick Search Bar */}
+                <div className="p-3 bg-panel rounded-xl border border-brass-soft/30 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-brass uppercase font-bold flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Returning Guest Recognition</span>
+                    </span>
+                    {isFastTrack && (
+                      <button
+                        type="button"
+                        onClick={handleClearReturningGuest}
+                        className="text-slate-400 hover:text-white text-[10px] underline"
+                      >
+                        Reset to New Guest
+                      </button>
+                    )}
                   </div>
 
-                  {/* AC / Non-AC Switcher */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                      Climate Type & Tariff
-                    </label>
-                    <div className="flex items-center gap-1 bg-panel p-1 rounded-lg border border-brass-soft/30">
+                  {!isFastTrack ? (
+                    <div className="relative">
+                      <Phone className="w-3.5 h-3.5 text-brass absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Type phone number or guest name (e.g. 9847123456)..."
+                        value={searchGuestInput}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSearchGuestInput(val);
+                          if (val.length >= 4 && typeof phoneLookup === 'function') {
+                            const match = phoneLookup(val);
+                            if (match) applyGuestData(match);
+                          }
+                        }}
+                        className="w-full bg-ink border border-brass-soft rounded-lg pl-9 pr-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-brass placeholder-slate-500"
+                      />
+                    </div>
+                  ) : (
+                    /* Returning Guest Recognized Badge */
+                    <div className="p-3 bg-brass/10 border border-brass rounded-xl flex items-center justify-between gap-3 animate-in fade-in">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-brass text-ink font-bold font-display flex items-center justify-center text-sm shrink-0">
+                          {returningGuestFound.name?.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-white text-xs sm:text-sm truncate">
+                              {returningGuestFound.name}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded bg-signal-green text-ink font-mono font-bold text-[9px] shrink-0">
+                              ✓ ID ON FILE
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-mono text-brass mt-0.5 truncate">
+                            📞 {returningGuestFound.phone} • {returningGuestFound.total_stays || 1} Past Stays • {returningGuestFound.id_proof_type || 'Aadhaar'} ({returningGuestFound.id_proof_number || 'VERIFIED'})
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleClearReturningGuest}
+                        className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded bg-panel border border-brass-soft/30 shrink-0"
+                        title="Clear and register as new guest"
+                      >
+                        ✕ Clear
+                      </button>
+                    </div>
+                  )}
+
+                  {isFastTrack && (
+                    <div className="text-[10px] font-mono text-signal-green flex items-center gap-1.5 pt-0.5">
+                      <Sparkles className="w-3 h-3 shrink-0" />
+                      <span>Fast-Track Active: Guest info & ID capture skipped. Proceed directly to Amount step!</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Room Selection & Climate Type Banner */}
+                <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                        Select Room
+                      </label>
+                      <select
+                        value={roomId}
+                        onChange={(e) => setRoomId(e.target.value)}
+                        className="bg-panel border border-brass-soft rounded-lg px-3 py-1.5 text-white font-mono font-bold text-sm focus:outline-none focus:border-brass"
+                      >
+                        {vacantRooms.map(r => (
+                          <option key={r.id} value={r.id}>
+                            Room {r.room_number} (Floor {r.floor} • {r.status.toUpperCase()})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1 text-right">
+                      <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                        Daily Tariff {isSeasonalSurge && <span className="text-signal-amber font-bold">({seasonalName || 'Seasonal Surge'})</span>}
+                      </span>
+                      <div className="text-xl font-bold font-mono text-brass">
+                        {formatCurrency(nightlyRate)} <span className="text-xs text-slate-400 font-normal">/ day</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Climate Toggle */}
+                  <div className="pt-2 border-t border-brass-soft/20 flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-[11px] font-mono text-slate-300">Climate Type:</span>
+                    <div className="flex items-center gap-2 font-mono">
                       <button
                         type="button"
                         onClick={() => setAcOrNonAc('AC')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono font-bold transition-all ${
+                        className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
                           acOrNonAc === 'AC'
-                            ? 'bg-signal-green text-ink shadow-sm'
-                            : 'text-slate-400 hover:text-white'
+                            ? 'bg-brass text-ink border-brass shadow'
+                            : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
                         }`}
                       >
                         <Wind className="w-3.5 h-3.5" />
-                        <span>AC</span>
+                        <span>AC ({formatCurrency(roomType.ac_rate)})</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setAcOrNonAc('Non-AC')}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-mono font-bold transition-all ${
+                        className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
                           acOrNonAc === 'Non-AC'
-                            ? 'bg-slate-300 text-ink shadow-sm'
-                            : 'text-slate-400 hover:text-white'
+                            ? 'bg-brass text-ink border-brass shadow'
+                            : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
                         }`}
                       >
                         <Fan className="w-3.5 h-3.5" />
-                        <span>Non-AC</span>
+                        <span>Non-AC ({formatCurrency(roomType.non_ac_rate)})</span>
                       </button>
                     </div>
                   </div>
-
-                  {/* Rate per day */}
-                  <div className="text-right">
-                    <div className="text-[10px] font-mono uppercase text-slate-400">
-                      {isSeasonalSurge ? 'Seasonal Tariff' : 'Daily Tariff'}
-                    </div>
-                    <div className="text-xl font-mono font-bold text-brass flex items-center gap-1 justify-end">
-                      <span>{formatCurrency(nightlyRate)}</span>
-                      <span className="text-xs font-normal text-slate-400">/ day</span>
-                    </div>
-                    {isSeasonalSurge && (
-                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-signal-green/20 text-signal-green font-bold">
-                        ⚡ {seasonalName || 'Surge Active'}
-                      </span>
-                    )}
-                  </div>
                 </div>
-              </div>
 
-              {/* Day-based duration selection */}
-              <div className="bg-panel p-3.5 rounded-xl border border-brass/40 space-y-2">
-                <label className="text-[11px] font-mono uppercase text-brass font-bold flex items-center justify-between">
-                  <span>Stay Duration & Days</span>
-                  <span className="text-white text-xs font-bold">
-                    {totalNights} {totalNights === 1 ? 'Day (24 hrs)' : 'Days'}
-                  </span>
-                </label>
+                {/* Day-Based Stay Duration Selection */}
+                <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                      Stay Duration & Days
+                    </label>
+                    <span className="text-xs font-mono font-bold text-brass">
+                      {totalNights} {totalNights === 1 ? 'Day (24 hrs)' : 'Days'}
+                    </span>
+                  </div>
 
-                {/* Quick 1 Day / 2 Days / 3 Days / Custom Buttons */}
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { days: 1, label: '1 Day (24 hrs)' },
-                    { days: 2, label: '2 Days' },
-                    { days: 3, label: '3 Days' },
-                    { days: 'custom', label: 'Custom Days' }
-                  ].map((item) => {
-                    const isSelected = item.days === 'custom' ? isCustomDays : (!isCustomDays && stayDays === item.days);
-                    return (
+                  <div className="grid grid-cols-4 gap-2 font-mono text-xs">
+                    {[1, 2, 3].map(days => (
                       <button
-                        key={item.label}
+                        key={days}
                         type="button"
                         onClick={() => {
-                          if (item.days === 'custom') {
-                            setIsCustomDays(true);
-                          } else {
-                            setIsCustomDays(false);
-                            setStayDays(item.days);
-                          }
+                          setStayDays(days);
+                          setIsCustomDays(false);
                         }}
-                        className={`py-2 px-2 rounded-xl text-xs font-mono font-bold transition-all text-center border ${
-                          isSelected
-                            ? 'bg-brass text-ink border-brass shadow-md shadow-brass/20 scale-[1.02]'
-                            : 'bg-ink border-brass-soft/30 text-slate-300 hover:text-white hover:border-brass-soft'
+                        className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
+                          stayDays === days && !isCustomDays
+                            ? 'bg-brass text-ink border-brass shadow-md shadow-brass/20'
+                            : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
                         }`}
                       >
-                        {item.label}
+                        <div>{days} {days === 1 ? 'Day' : 'Days'}</div>
                       </button>
-                    );
-                  })}
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomDays(true)}
+                      className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
+                        isCustomDays
+                          ? 'bg-brass text-ink border-brass shadow-md shadow-brass/20'
+                          : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
+                      }`}
+                    >
+                      <div>Custom</div>
+                    </button>
+                  </div>
+
+                  {isCustomDays && (
+                    <div className="pt-2 flex items-center justify-between bg-panel p-2.5 rounded-lg border border-brass-soft/30 animate-in fade-in">
+                      <span className="text-[11px] font-mono text-slate-300">Enter Number of Days:</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStayDays(p => Math.max(1, p - 1))}
+                          className="w-7 h-7 rounded-lg bg-ink hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max="60"
+                          value={stayDays}
+                          onChange={(e) => setStayDays(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-14 bg-ink border border-brass-soft rounded-lg py-1 text-center font-mono font-bold text-white text-sm focus:outline-none focus:border-brass"
+                        />
+                        <span className="text-xs font-mono text-slate-400">Days</span>
+                        <button
+                          type="button"
+                          onClick={() => setStayDays(p => p + 1)}
+                          className="w-7 h-7 rounded-lg bg-ink hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* STEP 2 (NEW GUEST ONLY): GUEST RECORDS & PROFILE */}
+            {(!isFastTrack && (isAllInOne || step === 2)) && (
+              <div className="space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-brass uppercase font-bold flex items-center gap-1">
+                    <User className="w-3.5 h-3.5" />
+                    <span>New Guest Information</span>
+                  </span>
                 </div>
 
-                {/* Custom Stepper Input if Custom Days selected */}
-                {isCustomDays && (
-                  <div className="pt-2 flex items-center justify-between bg-ink p-2.5 rounded-lg border border-brass-soft/30 animate-in fade-in">
-                    <span className="text-[11px] font-mono text-slate-300">Enter Number of Days:</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setStayDays(p => Math.max(1, p - 1))}
-                        className="w-7 h-7 rounded-lg bg-panel hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                      Mobile Number *
+                    </label>
+                    <div className="relative">
+                      <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                       <input
-                        type="number"
-                        min="1"
-                        max="60"
-                        value={stayDays}
-                        onChange={(e) => setStayDays(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-14 bg-panel border border-brass-soft rounded-lg py-1 text-center font-mono font-bold text-white text-sm focus:outline-none focus:border-brass"
+                        type="tel"
+                        required
+                        placeholder="+91 98470 11223"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        className="w-full bg-ink border border-brass-soft rounded-lg pl-9 pr-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-brass"
                       />
-                      <span className="text-xs font-mono text-slate-400">Days</span>
-                      <button
-                        type="button"
-                        onClick={() => setStayDays(p => p + 1)}
-                        className="w-7 h-7 rounded-lg bg-panel hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-          )}
 
-          {/* STEP 2: GUEST RECORDS & PHONE LOOKUP */}
-          {(isAllInOne || step === 2) && (
-            <div className="space-y-3 animate-in fade-in">
-              <div className="flex items-center justify-between text-[11px] font-mono">
-                <span className="text-brass uppercase font-bold flex items-center gap-1">
-                  <Search className="w-3.5 h-3.5" />
-                  <span>Guest Records & Profile</span>
-                </span>
-                {returningGuestFound && (
-                  <span className="text-signal-green flex items-center gap-1 text-[10px] font-bold animate-in fade-in">
-                    <Sparkles className="w-3 h-3" />
-                    <span>Returning Guest Recognized ({returningGuestFound.total_stays} stays)</span>
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Phone input with instant auto-complete */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    Mobile Number (Fast Lookup) *
-                  </label>
-                  <div className="relative">
-                    <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                      Guest Full Name *
+                    </label>
                     <input
-                      type="tel"
+                      type="text"
                       required
-                      placeholder="+91 98470 11223"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-ink border border-brass-soft rounded-lg pl-9 pr-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-brass"
+                      placeholder="e.g. Rahul Sharma"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-brass"
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                      Residential Address / City
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Calicut, Kerala"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-brass"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* STEP 3 (NEW GUEST ONLY): ID CAPTURE & COMPLIANCE */}
+            {(!isFastTrack && (isAllInOne || step === 3)) && (
+              <div className="space-y-4 animate-in fade-in">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-brass uppercase font-bold flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-signal-green" />
+                    <span>Government ID Capture (Police Compliance)</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-sans">
+                    Saved once &bull; Auto-linked forever
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">ID Document Type</label>
+                    <select
+                      value={idType}
+                      onChange={(e) => setIdType(e.target.value)}
+                      className="w-full bg-ink border border-brass-soft rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-brass"
+                    >
+                      <option>Aadhaar Card</option>
+                      <option>Driving License</option>
+                      <option>Passport</option>
+                      <option>Voter ID</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 block mb-1">ID Document Number</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. XXXX-XXXX-4812"
+                      value={idNumber}
+                      onChange={(e) => setIdNumber(e.target.value)}
+                      className="w-full bg-ink border border-brass-soft rounded-lg px-2.5 py-1.5 text-white text-xs focus:outline-none focus:border-brass"
                     />
                   </div>
                 </div>
 
-                {/* Guest Name */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    Guest Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Dr. Vivek Menon"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-1.5 text-white text-xs font-semibold focus:outline-none focus:border-brass"
-                  />
-                </div>
+                <IdPhotoCaptureWidget
+                  frontPhotoUrl={idPhotoUrl}
+                  backPhotoUrl={idPhotoBackUrl}
+                  idType={idType}
+                  guestPhone={phone}
+                  onChangeFront={(url) => setIdPhotoUrl(url)}
+                  onChangeBack={(url) => setIdPhotoBackUrl(url)}
+                />
               </div>
+            )}
 
-              {/* Address & ID Proof Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    Address / Origin City
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Medical College Junction, Kozhikode"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="w-full bg-ink border border-brass-soft/40 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-brass"
-                  />
-                </div>
+            {/* STEP 2 (FOR FAST-TRACK) OR STEP 4 (FOR NEW GUEST): PAYMENT & KEYS */}
+            {(isAllInOne || (isFastTrack ? step === 2 : step === 4)) && (
+              <div className="space-y-4 animate-in fade-in">
+                {/* Fast-Track Guest Recap Header */}
+                {isFastTrack && (
+                  <div className="p-3 bg-panel rounded-xl border border-brass-soft/40 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-brass text-ink font-bold font-display flex items-center justify-center text-xs">
+                          {name?.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white text-xs">{name}</span>
+                            <span className="px-1.5 py-0.2 rounded bg-signal-green text-ink font-mono font-bold text-[9px]">
+                              ✓ ID VERIFIED
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400">
+                            📞 {phone} &bull; {idType} ({idNumber || 'On File'})
+                          </div>
+                        </div>
+                      </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    ID Proof Type
-                  </label>
-                  <select
-                    value={idType}
-                    onChange={(e) => setIdType(e.target.value)}
-                    className="w-full bg-ink border border-brass-soft/40 rounded-lg px-2 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-brass"
-                  >
-                    <option>Aadhaar Card</option>
-                    <option>Driving License</option>
-                    <option>Passport</option>
-                    <option>Voter ID</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    ID Number / Reference
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. XXXX-XXXX-4812"
-                    value={idNumber}
-                    onChange={(e) => setIdNumber(e.target.value)}
-                    className="w-full bg-ink border border-brass-soft/40 rounded-lg px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-brass"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: GOVERNMENT ID PHOTO CAPTURE */}
-          {(isAllInOne || step === 3) && (
-            <div className="space-y-2 animate-in fade-in">
-              <IdPhotoCaptureWidget
-                frontPhotoUrl={idPhotoUrl}
-                backPhotoUrl={idPhotoBackUrl}
-                idType={idType}
-                guestPhone={phone}
-                onChangeFront={(url) => setIdPhotoUrl(url)}
-                onChangeBack={(url) => setIdPhotoBackUrl(url)}
-                onViewFullscreen={(img, t) => onViewIdPhoto && onViewIdPhoto(img, t)}
-              />
-            </div>
-          )}
-
-          {/* STEP 4: ADVANCE PAYMENT & CONFIRMATION */}
-          {(isAllInOne || step === 4) && (
-            <div className="space-y-3 animate-in fade-in">
-              {/* Advance Deposit & Payment Method */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    Advance Deposit (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={advancePaid}
-                    onChange={(e) => setAdvancePaid(e.target.value)}
-                    className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-1.5 text-signal-green font-mono font-bold text-sm focus:outline-none focus:border-brass"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    Advance Payment Method
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {['UPI', 'Cash', 'Card'].map(m => (
                       <button
-                        key={m}
                         type="button"
-                        onClick={() => setPaymentMode(m)}
-                        className={`py-1.5 rounded text-xs font-mono font-bold transition-all ${
-                          paymentMode === m
-                            ? 'bg-brass text-ink shadow'
-                            : 'bg-ink border border-brass-soft/30 text-slate-400 hover:text-white'
-                        }`}
+                        onClick={() => setIsEditDetailsOpen(prev => !prev)}
+                        className="text-[10px] font-mono text-brass hover:text-white flex items-center gap-1 bg-ink px-2 py-1 rounded border border-brass-soft/30"
                       >
-                        {m}
+                        <span>{isEditDetailsOpen ? 'Hide Edit' : '✎ Edit Info'}</span>
+                        {isEditDetailsOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                       </button>
-                    ))}
+                    </div>
+
+                    {isEditDetailsOpen && (
+                      <div className="pt-2 border-t border-brass-soft/20 grid grid-cols-2 gap-2 text-[11px] font-mono animate-in fade-in">
+                        <div>
+                          <label className="text-[9px] text-slate-400 block">Name</label>
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="w-full bg-ink border border-brass-soft/40 rounded px-2 py-1 text-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 block">Phone</label>
+                          <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            className="w-full bg-ink border border-brass-soft/40 rounded px-2 py-1 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tariff & Payment Breakdown */}
+                <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
+                  <div className="flex items-center justify-between text-brass text-[11px] uppercase font-mono font-bold border-b border-brass-soft/20 pb-1.5">
+                    <span>Stay Charges & GST Breakdown</span>
+                    <span>{totalNights} {totalNights === 1 ? 'Day' : 'Days'} Stay</span>
+                  </div>
+
+                  <div className="space-y-1.5 font-mono text-xs">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Room Tariff ({totalNights} x {formatCurrency(nightlyRate)}):</span>
+                      <span>{formatCurrency(gstCalc.taxableRoomCharge)}</span>
+                    </div>
+                    {gstCalc.gstAmount > 0 ? (
+                      <div className="flex justify-between text-slate-400 text-[11px]">
+                        <span>Kerala GST ({gstCalc.gstRate}%):</span>
+                        <span>{formatCurrency(gstCalc.gstAmount)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between text-signal-green text-[11px]">
+                        <span>GST Exemption (&lt; ₹2,500/day):</span>
+                        <span>₹0.00 (0% GST)</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-brass text-base font-bold border-t border-brass-soft/20 pt-2">
+                      <span>Grand Total:</span>
+                      <span>{formatCurrency(gstCalc.grandTotal)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Advance Amount & Payment Mode */}
+                <div className="bg-panel p-4 rounded-xl border border-brass-soft/40 space-y-3">
+                  <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                    Advance Paid at Check-In Counter *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono">
+                    <div className="relative">
+                      <span className="text-slate-400 absolute left-3 top-2.5 font-bold">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max={gstCalc.grandTotal * 2}
+                        value={advancePaid}
+                        onChange={(e) => setAdvancePaid(e.target.value)}
+                        className="w-full bg-ink border border-brass-soft rounded-lg pl-8 pr-3 py-2 text-white font-bold text-sm focus:outline-none focus:border-brass"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {['Cash', 'UPI', 'Card'].map(mode => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setPaymentMode(mode)}
+                          className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all text-center ${
+                            paymentMode === mode
+                              ? 'bg-brass text-ink border-brass shadow'
+                              : 'bg-ink text-slate-400 border-brass-soft/30 hover:text-white'
+                          }`}
+                        >
+                          {mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1">
+                    <span>Balance Due at Checkout:</span>
+                    <span className="font-bold text-signal-amber">
+                      {formatCurrency(Math.max(0, gstCalc.grandTotal - Number(advancePaid || 0)))}
+                    </span>
                   </div>
                 </div>
               </div>
-
-              {/* Auto Bill Computation Summary Box */}
-              <div className="p-3.5 bg-panel rounded-xl border border-brass-soft/30 space-y-1.5 font-mono text-xs">
-                <div className="flex justify-between text-slate-300 text-[11px]">
-                  <span>Tariff ({totalNights} {totalNights === 1 ? 'Day' : 'Days'} @ {formatCurrency(nightlyRate)}):</span>
-                  <span className="text-white font-bold">{formatCurrency(gstCalc.totalRoomCharge)}</span>
-                </div>
-                <div className="flex justify-between text-slate-400 text-[11px]">
-                  <span>Kerala GST ({gstCalc.gstRate}% - SAC 996311):</span>
-                  <span className="text-white font-bold">{formatCurrency(gstCalc.gstAmount)}</span>
-                </div>
-                <div className="flex justify-between text-brass text-sm font-bold border-t border-brass-soft/20 pt-1.5">
-                  <span>Estimated Grand Total ({totalNights} {totalNights === 1 ? 'Day' : 'Days'}):</span>
-                  <span>{formatCurrency(gstCalc.grandTotal)}</span>
-                </div>
-              </div>
-            </div>
-          )}
+            )}
 
           </div>
 
-          {/* Pinned Bottom Action Bar with Complete Back-Navigation & Safe Area */}
-          <div className="shrink-0 p-3 sm:p-4 bg-panel border-t border-brass-soft/30 pb-safe flex items-center justify-between gap-3 shadow-lg z-20">
+          {/* Pinned Bottom Action Bar with Mobile Safe Area & Thumb Reach */}
+          <div className="shrink-0 px-3 sm:px-4 py-3 bg-panel border-t border-brass-soft/30 pb-safe-mobile flex items-center justify-between gap-3 shadow-xl z-20">
             {/* Left Button: Cancel or Back Step */}
             {!isAllInOne && step > 1 ? (
               <button
@@ -710,7 +901,7 @@ export default function WalkInModal({
             )}
 
             {/* Right Button: Continue Step or Final Check-In */}
-            {!isAllInOne && step < 4 ? (
+            {!isAllInOne && step < totalSteps ? (
               <button
                 type="button"
                 onClick={handleNextStep}
@@ -726,7 +917,7 @@ export default function WalkInModal({
               >
                 <Check className="w-4 h-4 stroke-[3]" />
                 <span className="truncate">
-                  {isPreBooking ? 'Confirm Reservation' : `Check In (${totalNights} ${totalNights === 1 ? 'Day' : 'Days'} • Rm ${selectedRoom?.room_number || '202'})`}
+                  {isPreBooking ? 'Confirm Reservation' : `Check In (Rm ${selectedRoom?.room_number || '202'} • ₹${advancePaid})`}
                 </span>
               </button>
             )}

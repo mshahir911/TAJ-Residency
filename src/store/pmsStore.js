@@ -16,6 +16,7 @@ import {
   SEED_SEASONAL_OVERRIDES,
   SEED_HEATMAP_DATA
 } from '../types/data';
+import { syncService } from '../services/syncService';
 
 const STORAGE_KEY = 'taj_residency_pms_v6_safe_auth';
 
@@ -77,14 +78,39 @@ export function usePMSStore() {
     return initial;
   });
 
-  // Local-first persistent write
+  // Local-first persistent write & cross-device broadcast
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      syncService.broadcast(state, 'STATE_UPDATE');
     } catch (e) {
       console.error('LocalStorage write error:', e);
     }
   }, [state]);
+
+  // Real-Time Cross-Device Synchronization Listener (Desk <-> Mobile)
+  const [syncStatus, setSyncStatus] = useState({
+    status: 'local',
+    lastSyncedAt: null,
+    connectedDevicesCount: 1,
+    deviceId: syncService.getDeviceId()
+  });
+
+  useEffect(() => {
+    syncService.init(
+      (remoteState, actionName, source) => {
+        setState(prev => ({
+          ...prev,
+          ...remoteState,
+          currentStaffId: prev.currentStaffId,
+          viewMode: prev.viewMode
+        }));
+      },
+      (statusInfo) => {
+        setSyncStatus(statusInfo);
+      }
+    );
+  }, []);
 
   // Online / Offline listener
   useEffect(() => {
@@ -1029,7 +1055,9 @@ export function usePMSStore() {
     selfCheckins: scopedSelfCheckins,
     roleConfig: STAFF_ROLES[currentRole] || STAFF_ROLES.receptionist,
     stats,
+    syncStatus,
     actions: {
+      forceSyncNow: () => syncService.broadcast(state, 'MANUAL_SYNC'),
       loginStaff,
       quickSwitchStaff,
       setViewMode,

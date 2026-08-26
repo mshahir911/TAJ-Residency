@@ -723,13 +723,21 @@ body {
   overflow-y: auto;
 }
 
-/* Mobile Safe Areas */
+/* Mobile Safe Areas & Dynamic Island Clearance */
 .pt-safe {
-  padding-top: max(0.75rem, env(safe-area-inset-top));
+  padding-top: max(1rem, env(safe-area-inset-top, 24px)) !important;
+}
+
+.modal-header-safe {
+  padding-top: max(1.25rem, calc(env(safe-area-inset-top, 32px) + 0.5rem)) !important;
 }
 
 .pb-safe {
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 20px)) !important;
+}
+
+.pb-safe-mobile {
+  padding-bottom: max(1.5rem, calc(env(safe-area-inset-bottom, 24px) + 0.75rem)) !important;
 }
 
 .pl-safe {

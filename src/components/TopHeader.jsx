@@ -23,12 +23,13 @@ export default function TopHeader({
   onSwitchProperty,
   onOpenOnboarding,
   onOpenDatabaseModal,
-  isOnline,
+  isOnline = true,
+  syncStatus = {},
   stats,
   onOpenWalkIn,
   onOpenShiftHandover,
-  currentShift,
-  currentRole
+  currentShift = {},
+  currentRole = 'receptionist'
 }) {
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [theme, setTheme] = useState(getInitialTheme);
@@ -135,16 +136,16 @@ export default function TopHeader({
           </div>
         </button>
 
-        {/* Sync Status Badge / Dot */}
+        {/* Sync Status Badge / Dot with Real-Time Cross-Device indicator */}
         <button
           type="button"
           onClick={onOpenDatabaseModal}
           className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-ink border border-brass-soft/30 hover:border-brass text-slate-300 hover:text-white shrink-0 transition-colors"
-          title={isOnline ? 'System is Online & Cloud Synced' : 'Offline / Local storage active'}
+          title={syncStatus?.status === 'connected' ? `Real-Time Cloud Synced (${syncStatus?.connectedDevicesCount || 1} devices linked)` : 'Click to configure real-time cloud sync across desk & phone'}
         >
-          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-signal-green pulse-green' : 'bg-signal-amber'}`} />
+          <span className={`w-2 h-2 rounded-full ${syncStatus?.status === 'connected' ? 'bg-signal-green shadow-sm shadow-signal-green animate-pulse' : (isOnline ? 'bg-signal-green' : 'bg-signal-amber')}`} />
           <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">
-            {isOnline ? 'ONLINE' : 'LOCAL'}
+            {syncStatus?.status === 'connected' ? 'CLOUD SYNC' : (isOnline ? 'ONLINE' : 'LOCAL')}
           </span>
         </button>
 

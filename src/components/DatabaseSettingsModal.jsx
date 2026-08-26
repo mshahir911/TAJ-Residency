@@ -12,18 +12,31 @@ import {
   Layers,
   ArrowRight,
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  Wifi,
+  Smartphone,
+  Laptop
 } from 'lucide-react';
-import { isSupabaseConfigured } from '../lib/supabaseClient';
+import { supabaseUrl, supabaseAnonKey, isSupabaseConfigured, saveCustomSupabaseConfig } from '../lib/supabaseClient';
 
 export default function DatabaseSettingsModal({
   isOpen,
   onClose,
-  property
+  property,
+  syncStatus = {},
+  onForceSync
 }) {
   const [copied, setCopied] = useState(false);
+  const [customUrl, setCustomUrl] = useState(supabaseUrl);
+  const [customKey, setCustomKey] = useState(supabaseAnonKey);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [syncingNow, setSyncingNow] = useState(false);
 
   if (!isOpen) return null;
+
+  const isConnected = syncStatus.status === 'connected';
+  const devicesCount = syncStatus.connectedDevicesCount || 1;
 
   const tables = [
     { name: 'properties', count: '2 (Multi-Tenant)', desc: 'Properties directory & Kerala GSTIN configuration' },
@@ -36,17 +49,29 @@ export default function DatabaseSettingsModal({
     { name: 'audit_logs', count: '6 Events', desc: 'Immutable security and operations audit trail' }
   ];
 
-  const handleCopySchemaNotice = () => {
-    navigator.clipboard.writeText('supabase/schema.sql');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleSaveConfig = () => {
+    saveCustomSupabaseConfig(customUrl, customKey);
+    setSaveSuccess(true);
+    setTimeout(() => {
+      window.location.reload();
+    }, 800);
+  };
+
+  const handleTriggerSync = () => {
+    setSyncingNow(true);
+    if (typeof onForceSync === 'function') {
+      onForceSync();
+    }
+    setTimeout(() => {
+      setSyncingNow(false);
+    }, 1000);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 modal-overlay animate-in fade-in duration-200">
       <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/90 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[92vh]">
         {/* Header with Mobile Back Button & Safe Area */}
-        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+        <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3.5 bg-panel border-b border-brass-soft/30 flex items-center justify-between modal-header-safe">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
@@ -62,10 +87,10 @@ export default function DatabaseSettingsModal({
             </div>
             <div className="min-w-0">
               <h2 className="font-display font-bold text-white text-sm sm:text-lg leading-tight truncate">
-                Cloud Sync & Architecture
+                Cloud Sync & Multi-Device Linking
               </h2>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
-                PostgreSQL • Row Level Security • Photos
+                Reception Laptop ↔ Owner Mobile Real-Time Engine
               </p>
             </div>
           </div>
@@ -79,41 +104,113 @@ export default function DatabaseSettingsModal({
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 space-y-5 overflow-y-auto flex-1 text-xs">
-          {/* Active Engine Card */}
-          <div className="p-4 bg-ink rounded-xl border border-brass-soft/30 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-signal-green/20 border border-signal-green flex items-center justify-center text-signal-green">
-                <HardDrive className="w-5 h-5" />
+        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+          {/* Active Real-Time Link Card */}
+          <div className="p-4 bg-ink rounded-xl border border-brass-soft/40 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${isConnected ? 'bg-signal-green shadow-md shadow-signal-green animate-pulse' : 'bg-signal-amber'}`} />
+                <span className="font-display font-bold text-white text-sm">
+                  {isConnected ? 'Real-Time Cloud Synchronization Active' : 'Local Standby Mode (Auto-Syncing)'}
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-display font-bold text-white text-sm">
-                    {isSupabaseConfigured ? 'Supabase Cloud PostgreSQL Active' : 'Local-First Resilient Engine Active'}
-                  </span>
-                  <span className="px-1.5 py-0.2 rounded bg-signal-green text-ink font-mono font-bold text-[9px]">
-                    ZERO-LATENCY
-                  </span>
+              <button
+                type="button"
+                onClick={handleTriggerSync}
+                disabled={syncingNow}
+                className="px-3 py-1.5 rounded-lg bg-brass text-ink font-mono font-bold text-xs flex items-center gap-1.5 hover:brightness-110 active:scale-95 transition-all shadow"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncingNow ? 'animate-spin' : ''}`} />
+                <span>{syncingNow ? 'Broadcasting...' : 'Force Sync Now'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-[11px] pt-1">
+              <div className="p-2 bg-panel rounded-lg border border-brass-soft/20 flex items-center gap-2">
+                <Laptop className="w-4 h-4 text-brass shrink-0" />
+                <div>
+                  <div className="text-slate-400 text-[10px]">Reception Desk</div>
+                  <div className="text-white font-bold">Linked</div>
                 </div>
-                <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                  {isSupabaseConfigured 
-                    ? 'Connected to live PostgreSQL instance with Row Level Security (RLS).'
-                    : 'Running in high-speed local storage mode with automatic fallback. Connect your Supabase project URL in .env anytime.'}
-                </p>
               </div>
+
+              <div className="p-2 bg-panel rounded-lg border border-brass-soft/20 flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-signal-green shrink-0" />
+                <div>
+                  <div className="text-slate-400 text-[10px]">Owner Mobile</div>
+                  <div className="text-white font-bold">Linked</div>
+                </div>
+              </div>
+
+              <div className="p-2 bg-panel rounded-lg border border-brass-soft/20 flex items-center gap-2 col-span-2 sm:col-span-1">
+                <Wifi className="w-4 h-4 text-signal-amber shrink-0" />
+                <div>
+                  <div className="text-slate-400 text-[10px]">Active Sessions</div>
+                  <div className="text-white font-bold">{devicesCount} {devicesCount === 1 ? 'Device' : 'Devices'}</div>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-300 font-sans leading-relaxed">
+              When the receptionist updates room bookings, folios, or cash/UPI collections on the desk computer, all changes reflect on your mobile phone in real-time.
+            </p>
+          </div>
+
+          {/* Cloud Database Credentials (Supabase) */}
+          <div className="p-4 bg-panel rounded-xl border border-brass-soft/30 space-y-3 font-mono">
+            <div className="flex items-center justify-between text-brass text-[11px] uppercase font-bold">
+              <span>Cloud Database Connection (Supabase)</span>
+              <span className="text-slate-400 font-normal">Project Settings</span>
+            </div>
+
+            <div className="space-y-2">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Supabase Project URL</label>
+                <input
+                  type="text"
+                  value={customUrl}
+                  onChange={(e) => setCustomUrl(e.target.value)}
+                  placeholder="https://your-project.supabase.co"
+                  className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-brass font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">Supabase Public Anon Key</label>
+                <input
+                  type="password"
+                  value={customKey}
+                  onChange={(e) => setCustomKey(e.target.value)}
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  className="w-full bg-ink border border-brass-soft rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-brass font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[10px] text-slate-400 font-sans">
+                {saveSuccess ? '✓ Saved! Reloading app...' : 'Paste your Supabase credentials to link both devices instantly.'}
+              </span>
+              <button
+                type="button"
+                onClick={handleSaveConfig}
+                className="px-4 py-1.5 rounded-lg bg-signal-green text-ink font-bold text-xs hover:brightness-110 active:scale-95 transition-all shadow"
+              >
+                Save & Connect
+              </button>
             </div>
           </div>
 
           {/* PostgreSQL Relational Tables Matrix */}
           <div className="space-y-2 font-mono">
             <div className="flex items-center justify-between text-brass text-[11px] uppercase font-bold border-b border-brass-soft/20 pb-1">
-              <span>PostgreSQL Relational Schema Tables</span>
+              <span>Relational Database Tables</span>
               <span className="text-slate-400 font-normal">supabase/schema.sql</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {tables.map((t, idx) => (
-                <div key={idx} className="p-2.5 bg-ink rounded-lg border border-brass-soft/20 space-y-1">
+                <div key={idx} className="p-2 bg-ink rounded-lg border border-brass-soft/20 space-y-0.5">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-white text-xs">{t.name}</span>
                     <span className="text-[9px] px-1.5 py-0.2 rounded bg-brass/20 text-brass">
@@ -127,31 +224,17 @@ export default function DatabaseSettingsModal({
               ))}
             </div>
           </div>
-
-          {/* Storage Bucket & Security Note */}
-          <div className="p-3.5 bg-panel rounded-xl border border-brass-soft/30 space-y-2 font-sans">
-            <div className="flex items-center gap-2 text-brass font-mono text-[11px] uppercase font-bold">
-              <ShieldCheck className="w-4 h-4" />
-              <span>Storage Buckets & Row Level Security (RLS)</span>
-            </div>
-
-            <ul className="space-y-1.5 text-slate-300 text-[11px] font-mono">
-              <li>• <strong>guest-id-proofs:</strong> Supabase Storage bucket for storing guest Aadhaar/Passport photo files securely.</li>
-              <li>• <strong>Role-Level RLS:</strong> Receptionist cannot alter base room rates; Housekeeping can only update room cleanliness status.</li>
-              <li>• <strong>Tenant Scoping:</strong> Every query strictly scopes by <code>property_id</code> for multi-hotel expansion.</li>
-            </ul>
-          </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-4 bg-panel border-t border-brass-soft/30 flex justify-between items-center font-mono text-xs">
-          <span className="text-slate-400">Migration File: <code>supabase/schema.sql</code></span>
+        {/* Mobile Sticky Close Button */}
+        <div className="sm:hidden p-3 bg-panel border-t border-brass-soft/30 pb-safe-mobile shrink-0">
           <button
-            onClick={handleCopySchemaNotice}
-            className="px-3 py-1.5 rounded-lg bg-brass text-ink font-bold hover:brightness-110 flex items-center gap-1.5 shadow-md shadow-brass/20"
+            type="button"
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-ink border border-brass text-brass font-mono font-bold text-xs flex items-center justify-center gap-1.5 active:scale-98"
           >
-            {copied ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'Copied Path!' : 'Copy Schema Path'}</span>
+            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+            <span>Close Database Settings</span>
           </button>
         </div>
       </div>

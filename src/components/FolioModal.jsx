@@ -199,7 +199,7 @@ _We look forward to welcoming you back to Calicut!_`;
       <div className="bg-panel-raised border-0 sm:border border-brass/50 rounded-none sm:rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl shadow-black/80 flex flex-col h-full sm:h-auto max-h-[100dvh] sm:max-h-[94vh]">
 
         {/* Header with Mobile Back Button & Safe Area */}
-        <div className="shrink-0 p-3 sm:p-4 bg-panel border-b border-brass-soft/30 flex items-center justify-between pt-safe">
+        <div className="shrink-0 px-3 sm:px-4 py-2.5 sm:py-3.5 bg-panel border-b border-brass-soft/30 flex items-center justify-between modal-header-safe">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               type="button"
