@@ -1058,6 +1058,20 @@ export function usePMSStore() {
     syncStatus,
     actions: {
       forceSyncNow: () => syncService.broadcast(state, 'MANUAL_SYNC'),
+      pushToCloud: () => syncService.broadcast(state, 'MANUAL_PUSH_MASTER'),
+      pullLatestFromCloud: async () => {
+        const latest = await syncService.pullLatestState();
+        if (latest) {
+          setState(prev => ({
+            ...prev,
+            ...latest,
+            currentStaffId: prev.currentStaffId,
+            viewMode: prev.viewMode
+          }));
+          return true;
+        }
+        return false;
+      },
       loginStaff,
       quickSwitchStaff,
       setViewMode,

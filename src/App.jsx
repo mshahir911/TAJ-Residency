@@ -560,6 +560,8 @@ export default function App() {
           property={store.property}
           syncStatus={store.syncStatus}
           onForceSync={store.actions.forceSyncNow}
+          onPushToCloud={store.actions.pushToCloud}
+          onPullFromCloud={store.actions.pullLatestFromCloud}
         />
       )}
 

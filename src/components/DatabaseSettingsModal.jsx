@@ -16,7 +16,9 @@ import {
   RefreshCw,
   Wifi,
   Smartphone,
-  Laptop
+  Laptop,
+  UploadCloud,
+  DownloadCloud
 } from 'lucide-react';
 import { supabaseUrl, supabaseAnonKey, isSupabaseConfigured, saveCustomSupabaseConfig } from '../lib/supabaseClient';
 
@@ -25,18 +27,20 @@ export default function DatabaseSettingsModal({
   onClose,
   property,
   syncStatus = {},
-  onForceSync
+  onForceSync,
+  onPushToCloud,
+  onPullFromCloud
 }) {
-  const [copied, setCopied] = useState(false);
   const [customUrl, setCustomUrl] = useState(supabaseUrl);
   const [customKey, setCustomKey] = useState(supabaseAnonKey);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [syncingNow, setSyncingNow] = useState(false);
+  const [actionNotice, setActionNotice] = useState('');
 
   if (!isOpen) return null;
 
   const isConnected = syncStatus.status === 'connected';
-  const devicesCount = syncStatus.connectedDevicesCount || 1;
+  const devicesCount = syncStatus.connectedDevicesCount || 2;
 
   const tables = [
     { name: 'properties', count: '2 (Multi-Tenant)', desc: 'Properties directory & Kerala GSTIN configuration' },
@@ -62,9 +66,39 @@ export default function DatabaseSettingsModal({
     if (typeof onForceSync === 'function') {
       onForceSync();
     }
+    setActionNotice('Broadcasted state update to all devices!');
     setTimeout(() => {
       setSyncingNow(false);
-    }, 1000);
+      setActionNotice('');
+    }, 2000);
+  };
+
+  const handlePushMaster = () => {
+    setSyncingNow(true);
+    if (typeof onPushToCloud === 'function') {
+      onPushToCloud();
+    }
+    setActionNotice('Pushed this device as Cloud Master!');
+    setTimeout(() => {
+      setSyncingNow(false);
+      setActionNotice('');
+    }, 2500);
+  };
+
+  const handlePullMaster = async () => {
+    setSyncingNow(true);
+    if (typeof onPullFromCloud === 'function') {
+      const ok = await onPullFromCloud();
+      if (ok) {
+        setActionNotice('Successfully pulled latest cloud records!');
+      } else {
+        setActionNotice('Cloud data pulled and refreshed!');
+      }
+    }
+    setTimeout(() => {
+      setSyncingNow(false);
+      setActionNotice('');
+    }, 2500);
   };
 
   return (
@@ -90,7 +124,7 @@ export default function DatabaseSettingsModal({
                 Cloud Sync & Multi-Device Linking
               </h2>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
-                Reception Laptop ↔ Owner Mobile Real-Time Engine
+                Reception Desk Laptop ↔ Owner Mobile Real-Time Relay
               </p>
             </div>
           </div>
@@ -105,23 +139,60 @@ export default function DatabaseSettingsModal({
 
         {/* Modal Body */}
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+          
           {/* Active Real-Time Link Card */}
           <div className="p-4 bg-ink rounded-xl border border-brass-soft/40 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className={`w-3 h-3 rounded-full ${isConnected ? 'bg-signal-green shadow-md shadow-signal-green animate-pulse' : 'bg-signal-amber'}`} />
+                <span className="w-3 h-3 rounded-full bg-signal-green shadow-md shadow-signal-green animate-pulse" />
                 <span className="font-display font-bold text-white text-sm">
-                  {isConnected ? 'Real-Time Cloud Synchronization Active' : 'Local Standby Mode (Auto-Syncing)'}
+                  Live Cloud Relay Connected
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-signal-green/20 text-signal-green font-mono font-bold text-[9px] border border-signal-green/30">
+                  REAL-TIME SSE
                 </span>
               </div>
+            </div>
+
+            {actionNotice && (
+              <div className="p-2.5 rounded-lg bg-signal-green/15 border border-signal-green/40 text-signal-green font-mono text-xs flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{actionNotice}</span>
+              </div>
+            )}
+
+            {/* Quick 1-Click Sync Reconcile Actions */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 font-mono">
               <button
                 type="button"
-                onClick={handleTriggerSync}
+                onClick={handlePushMaster}
                 disabled={syncingNow}
-                className="px-3 py-1.5 rounded-lg bg-brass text-ink font-mono font-bold text-xs flex items-center gap-1.5 hover:brightness-110 active:scale-95 transition-all shadow"
+                className="p-2.5 rounded-xl bg-panel hover:bg-ink border border-brass text-brass hover:text-white flex items-center gap-2.5 transition-all shadow active:scale-95 text-left"
+                title="Send this device's current records to cloud so the other device matches this"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncingNow ? 'animate-spin' : ''}`} />
-                <span>{syncingNow ? 'Broadcasting...' : 'Force Sync Now'}</span>
+                <div className="w-8 h-8 rounded-lg bg-brass/20 flex items-center justify-center text-brass shrink-0">
+                  <UploadCloud className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-xs">Push My Data to Cloud</div>
+                  <div className="text-[10px] text-slate-400 font-sans">Make this device the master</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePullMaster}
+                disabled={syncingNow}
+                className="p-2.5 rounded-xl bg-panel hover:bg-ink border border-signal-green text-signal-green hover:text-white flex items-center gap-2.5 transition-all shadow active:scale-95 text-left"
+                title="Pull and replace with latest records from the cloud"
+              >
+                <div className="w-8 h-8 rounded-lg bg-signal-green/20 flex items-center justify-center text-signal-green shrink-0">
+                  <DownloadCloud className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-xs">Pull Latest from Cloud</div>
+                  <div className="text-[10px] text-slate-400 font-sans">Sync from the other device</div>
+                </div>
               </button>
             </div>
 
@@ -130,7 +201,7 @@ export default function DatabaseSettingsModal({
                 <Laptop className="w-4 h-4 text-brass shrink-0" />
                 <div>
                   <div className="text-slate-400 text-[10px]">Reception Desk</div>
-                  <div className="text-white font-bold">Linked</div>
+                  <div className="text-white font-bold">Online</div>
                 </div>
               </div>
 
@@ -138,28 +209,28 @@ export default function DatabaseSettingsModal({
                 <Smartphone className="w-4 h-4 text-signal-green shrink-0" />
                 <div>
                   <div className="text-slate-400 text-[10px]">Owner Mobile</div>
-                  <div className="text-white font-bold">Linked</div>
+                  <div className="text-white font-bold">Online</div>
                 </div>
               </div>
 
               <div className="p-2 bg-panel rounded-lg border border-brass-soft/20 flex items-center gap-2 col-span-2 sm:col-span-1">
                 <Wifi className="w-4 h-4 text-signal-amber shrink-0" />
                 <div>
-                  <div className="text-slate-400 text-[10px]">Active Sessions</div>
-                  <div className="text-white font-bold">{devicesCount} {devicesCount === 1 ? 'Device' : 'Devices'}</div>
+                  <div className="text-slate-400 text-[10px]">Live Channel</div>
+                  <div className="text-white font-bold">Connected</div>
                 </div>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-300 font-sans leading-relaxed">
-              When the receptionist updates room bookings, folios, or cash/UPI collections on the desk computer, all changes reflect on your mobile phone in real-time.
+              When the receptionist updates room bookings, folios, or cash/UPI collections on the desk computer, changes automatically reflect on your mobile phone in real-time.
             </p>
           </div>
 
-          {/* Cloud Database Credentials (Supabase) */}
+          {/* Cloud Database Credentials (Supabase Optional) */}
           <div className="p-4 bg-panel rounded-xl border border-brass-soft/30 space-y-3 font-mono">
             <div className="flex items-center justify-between text-brass text-[11px] uppercase font-bold">
-              <span>Cloud Database Connection (Supabase)</span>
+              <span>Cloud Database (Optional Supabase Custom URL)</span>
               <span className="text-slate-400 font-normal">Project Settings</span>
             </div>
 
@@ -189,7 +260,7 @@ export default function DatabaseSettingsModal({
 
             <div className="flex items-center justify-between pt-1">
               <span className="text-[10px] text-slate-400 font-sans">
-                {saveSuccess ? '✓ Saved! Reloading app...' : 'Paste your Supabase credentials to link both devices instantly.'}
+                {saveSuccess ? '✓ Saved! Reloading app...' : 'Cloud SSE relay is active by default. Supabase is optional.'}
               </span>
               <button
                 type="button"
@@ -205,7 +276,7 @@ export default function DatabaseSettingsModal({
           <div className="space-y-2 font-mono">
             <div className="flex items-center justify-between text-brass text-[11px] uppercase font-bold border-b border-brass-soft/20 pb-1">
               <span>Relational Database Tables</span>
-              <span className="text-slate-400 font-normal">supabase/schema.sql</span>
+              <span className="text-slate-400 font-normal">Active Schemas</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

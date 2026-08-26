@@ -22,9 +22,14 @@ export default function PaperInvoice({
       }
     };
     if (isOpen) {
+      document.body.classList.add('has-open-invoice');
       window.addEventListener('keydown', handleKeyDown);
     }
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.classList.remove('has-open-invoice');
+      document.body.classList.remove('is-printing-invoice');
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen || (!room && !invoice)) return null;
@@ -65,7 +70,14 @@ export default function PaperInvoice({
   const paymentMode = invoice?.payment_mode || 'UPI';
 
   const handlePrint = () => {
+    document.body.classList.add('is-printing-invoice');
+    const cleanup = () => {
+      document.body.classList.remove('is-printing-invoice');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
     window.print();
+    setTimeout(cleanup, 2000);
   };
 
   // Direct File Download (Self-contained printable HTML invoice file)
@@ -150,11 +162,11 @@ _Thank you for choosing Taj Residency!_`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto modal-overlay flex flex-col items-center justify-start p-2 sm:p-6 backdrop-blur-md bg-black/80 animate-in fade-in duration-200">
-      <div className="bg-white text-[#11161D] rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl my-3 sm:my-6 flex flex-col font-sans border border-brass/40 relative">
+    <div className="fixed inset-0 z-50 overflow-y-auto modal-overlay invoice-modal-overlay flex flex-col items-center justify-start p-2 sm:p-6 backdrop-blur-md bg-black/80 animate-in fade-in duration-200">
+      <div className="bg-white text-[#11161D] rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl my-3 sm:my-6 flex flex-col font-sans border border-brass/40 relative invoice-modal-card">
         
         {/* Sticky Top Glassmorphism Control Bar (Always Accessible) */}
-        <div className="sticky top-0 z-30 p-3 sm:p-4 bg-[#0E1420]/95 backdrop-blur-xl border-b border-brass/40 flex items-center justify-between no-print text-white shadow-xl gap-2 flex-wrap rounded-t-2xl">
+        <div className="sticky top-0 z-30 p-3 sm:p-4 bg-[#0E1420]/95 backdrop-blur-xl border-b border-brass/40 flex items-center justify-between no-print invoice-controls-header text-white shadow-xl gap-2 flex-wrap rounded-t-2xl">
           
           {/* Left: Prominent Back Button & Status */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -415,7 +427,7 @@ _Thank you for choosing Taj Residency!_`;
         </div>
 
         {/* Sticky Bottom Glassmorphic Action Footer (Always Visible while Scrolling) */}
-        <div className="sticky bottom-0 z-30 p-3 sm:p-4 bg-[#0E1420]/95 backdrop-blur-xl border-t border-brass/40 flex items-center justify-between no-print text-white shadow-2xl rounded-b-2xl gap-2 flex-wrap">
+        <div className="sticky bottom-0 z-30 p-3 sm:p-4 bg-[#0E1420]/95 backdrop-blur-xl border-t border-brass/40 flex items-center justify-between no-print invoice-controls-footer text-white shadow-2xl rounded-b-2xl gap-2 flex-wrap">
           <button
             type="button"
             onClick={onClose}

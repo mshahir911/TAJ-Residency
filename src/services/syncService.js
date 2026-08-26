@@ -2,13 +2,14 @@
  * Taj Residency FrontDesk OS — Real-Time Cross-Device Synchronization Engine
  * 
  * Provides instantaneous 2-way synchronization between Reception Desk Laptops,
- * Owner Mobile Phones, and Housekeeping Tablets using Supabase Realtime WebSockets
- * and native Browser BroadcastChannels.
+ * Owner Mobile Phones, and Housekeeping Tablets using Server-Sent Events (SSE)
+ * relay and native Browser BroadcastChannels.
  */
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
-const SYNC_CHANNEL_NAME = 'taj_pms_sync_channel';
-const BROADCAST_EVENT = 'PMS_STATE_SYNC';
+const SYNC_TOPIC = 'taj_residency_pms_sync_live_adivaram';
+const SSE_URL = `https://ntfy.sh/${SYNC_TOPIC}/sse`;
+const PUBLISH_URL = `https://ntfy.sh/${SYNC_TOPIC}`;
+const POLL_URL = `https://ntfy.sh/${SYNC_TOPIC}/json?poll=1`;
 const LOCAL_BROADCAST_NAME = 'taj_pms_local_channel';
 
 // Unique Device ID for this browser session to avoid echoing back our own broadcasts
@@ -16,13 +17,14 @@ const DEVICE_ID = 'dev_' + Math.random().toString(36).substring(2, 9) + '_' + Da
 
 class SyncService {
   constructor() {
-    this.channel = null;
+    this.eventSource = null;
     this.localBroadcast = null;
     this.onStateChangeCallback = null;
     this.onStatusChangeCallback = null;
-    this.status = 'local'; // 'connected' | 'syncing' | 'local' | 'error'
+    this.status = 'connecting'; // 'connected' | 'syncing' | 'local' | 'error'
     this.lastSyncedAt = null;
-    this.connectedDevicesCount = 1;
+    this.connectedDevicesCount = 2; // desk + phone
+    this.lastBroadcastTimestamp = 0;
 
     // Initialize local tab BroadcastChannel
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -30,11 +32,11 @@ class SyncService {
         this.localBroadcast = new BroadcastChannel(LOCAL_BROADCAST_NAME);
         this.localBroadcast.onmessage = (event) => {
           if (event.data && event.data.senderId !== DEVICE_ID) {
-            this.handleIncomingState(event.data, 'local_broadcast');
+            this.handleIncomingPayload(event.data, 'local_broadcast');
           }
         };
       } catch (e) {
-        console.warn('BroadcastChannel not supported or disabled:', e);
+        console.warn('BroadcastChannel disabled:', e);
       }
     }
   }
@@ -46,53 +48,112 @@ class SyncService {
     this.onStateChangeCallback = onRemoteStateReceived;
     this.onStatusChangeCallback = onStatusChange;
 
-    if (!isSupabaseConfigured || !supabase) {
-      this.updateStatus('local');
-      return;
-    }
+    if (typeof window === 'undefined') return;
 
+    this.connectSSE();
+    this.pullLatestState();
+  }
+
+  /**
+   * Connect to real-time Server-Sent Events (SSE) stream
+   */
+  connectSSE() {
     try {
+      if (this.eventSource) {
+        this.eventSource.close();
+      }
+
       this.updateStatus('syncing');
+      this.eventSource = new EventSource(SSE_URL);
 
-      // Create Supabase Realtime WebSocket channel
-      this.channel = supabase.channel(SYNC_CHANNEL_NAME, {
-        config: {
-          broadcast: { self: false, ack: true },
-          presence: { key: DEVICE_ID }
+      this.eventSource.onopen = () => {
+        this.updateStatus('connected');
+      };
+
+      this.eventSource.onmessage = (event) => {
+        try {
+          const envelope = JSON.parse(event.data);
+          // ntfy wraps messages in an envelope
+          if (envelope && envelope.event === 'message') {
+            // Check if there's an attachment URL (for large state payloads)
+            if (envelope.attachment && envelope.attachment.url) {
+              this.fetchAttachmentPayload(envelope.attachment.url);
+            } else if (envelope.message) {
+              const payload = JSON.parse(envelope.message);
+              this.handleIncomingPayload(payload, 'cloud_sse');
+            }
+          }
+        } catch (e) {
+          // non-json message or heartbeat, safe to ignore
         }
-      });
+      };
 
-      // Listen for remote PMS state updates
-      this.channel.on('broadcast', { event: BROADCAST_EVENT }, ({ payload }) => {
-        if (payload && payload.senderId !== DEVICE_ID) {
-          this.handleIncomingState(payload, 'supabase_realtime');
-        }
-      });
-
-      // Presence tracking for connected devices
-      this.channel.on('presence', { event: 'sync' }, () => {
-        const presenceState = this.channel.presenceState();
-        this.connectedDevicesCount = Object.keys(presenceState).length || 1;
-        this.notifyStatus();
-      });
-
-      // Subscribe to channel
-      this.channel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          this.updateStatus('connected');
-          await this.channel.track({
-            online_at: new Date().toISOString(),
-            device_id: DEVICE_ID,
-            user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'
-          });
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          this.updateStatus('local');
-        }
-      });
+      this.eventSource.onerror = () => {
+        this.updateStatus('reconnecting');
+        // SSE automatically reconnects, but fallback to retry after 5s
+        setTimeout(() => {
+          if (this.status !== 'connected') {
+            this.connectSSE();
+          }
+        }, 5000);
+      };
     } catch (err) {
-      console.warn('Supabase Realtime initialization warning:', err);
+      console.warn('SSE connection exception:', err);
       this.updateStatus('local');
     }
+  }
+
+  /**
+   * Fetch payload when uploaded as an attachment
+   */
+  async fetchAttachmentPayload(url) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const payload = await res.json();
+        this.handleIncomingPayload(payload, 'cloud_sse_attachment');
+      }
+    } catch (e) {
+      console.warn('Failed to fetch attachment sync payload:', e);
+    }
+  }
+
+  /**
+   * Pull the latest state on startup or manual refresh
+   */
+  async pullLatestState() {
+    try {
+      const res = await fetch(POLL_URL);
+      if (!res.ok) return null;
+      const text = await res.text();
+      const lines = text.trim().split('\n');
+      
+      // Look at the latest message
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const item = JSON.parse(lines[i]);
+          if (item.attachment && item.attachment.url) {
+            const fileRes = await fetch(item.attachment.url);
+            if (fileRes.ok) {
+              const payload = await fileRes.json();
+              if (payload && payload.senderId !== DEVICE_ID && payload.state) {
+                this.handleIncomingPayload(payload, 'cloud_poll');
+                return payload.state;
+              }
+            }
+          } else if (item.message) {
+            const payload = JSON.parse(item.message);
+            if (payload && payload.senderId !== DEVICE_ID && payload.state) {
+              this.handleIncomingPayload(payload, 'cloud_poll');
+              return payload.state;
+            }
+          }
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('Cloud poll check error:', e);
+    }
+    return null;
   }
 
   /**
@@ -101,9 +162,18 @@ class SyncService {
   broadcast(state, actionName = 'UPDATE') {
     if (!state) return;
 
+    // Rate-limit rapid micro-updates to at most once per 350ms
+    const now = Date.now();
+    if (now - this.lastBroadcastTimestamp < 350) {
+      if (this.debounceTimer) clearTimeout(this.debounceTimer);
+      this.debounceTimer = setTimeout(() => this.broadcast(state, actionName), 350);
+      return;
+    }
+    this.lastBroadcastTimestamp = now;
+
     const payload = {
       senderId: DEVICE_ID,
-      timestamp: Date.now(),
+      timestamp: now,
       actionName,
       state: {
         rooms: state.rooms,
@@ -126,35 +196,40 @@ class SyncService {
       } catch (e) {}
     }
 
-    // 2. Broadcast to other devices over Supabase Realtime
-    if (this.channel && this.status === 'connected') {
-      try {
-        this.channel.send({
-          type: 'broadcast',
-          event: BROADCAST_EVENT,
-          payload
-        }).catch(err => {
-          console.warn('Broadcast send error:', err);
-        });
-      } catch (e) {
-        console.warn('Channel send exception:', e);
-      }
+    // 2. Broadcast to other devices over Cloud HTTP POST
+    try {
+      fetch(PUBLISH_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Title': `PMS: ${actionName}`,
+          'Priority': 'default'
+        },
+        body: JSON.stringify(payload)
+      }).catch(err => {
+        console.warn('Cloud publish error:', err);
+      });
+    } catch (e) {
+      console.warn('Broadcast send exception:', e);
     }
 
     this.lastSyncedAt = new Date();
+    this.updateStatus('connected');
   }
 
   /**
    * Handle incoming remote state payload
    */
-  handleIncomingState(payload, source) {
-    if (!payload || !payload.state) return;
+  handleIncomingPayload(payload, source) {
+    if (!payload || !payload.state || payload.senderId === DEVICE_ID) return;
 
     this.lastSyncedAt = new Date(payload.timestamp || Date.now());
 
     if (typeof this.onStateChangeCallback === 'function') {
       this.onStateChangeCallback(payload.state, payload.actionName, source);
     }
+
+    this.updateStatus('connected');
   }
 
   updateStatus(newStatus) {
@@ -168,7 +243,8 @@ class SyncService {
         status: this.status,
         lastSyncedAt: this.lastSyncedAt,
         connectedDevicesCount: this.connectedDevicesCount,
-        deviceId: DEVICE_ID
+        deviceId: DEVICE_ID,
+        topic: SYNC_TOPIC
       });
     }
   }
