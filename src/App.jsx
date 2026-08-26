@@ -41,6 +41,7 @@ export default function App() {
   const [isWalkInOpen, setIsWalkInOpen] = useState(false);
   const [walkInSelectedRoom, setWalkInSelectedRoom] = useState(null);
   const [walkInSelectedGuest, setWalkInSelectedGuest] = useState(null);
+  const [walkInSelectedReservation, setWalkInSelectedReservation] = useState(null);
 
   const [isDossierOpen, setIsDossierOpen] = useState(false);
   const [dossierGuest, setDossierGuest] = useState(null);
@@ -149,9 +150,10 @@ export default function App() {
   };
 
   // HANDLERS
-  const handleOpenWalkIn = (room = null, guest = null) => {
+  const handleOpenWalkIn = (room = null, guest = null, reservation = null) => {
     setWalkInSelectedRoom(room);
     setWalkInSelectedGuest(guest);
+    setWalkInSelectedReservation(reservation);
     setIsWalkInOpen(true);
   };
 
@@ -389,12 +391,16 @@ export default function App() {
           onClose={() => {
             setIsWalkInOpen(false);
             setWalkInSelectedGuest(null);
+            setWalkInSelectedReservation(null);
           }}
           rooms={store.rooms}
           guests={store.guests}
+          bookings={store.bookings}
           selectedRoom={walkInSelectedRoom}
           preselectedGuest={walkInSelectedGuest}
+          preselectedReservation={walkInSelectedReservation}
           onSaveBooking={handleSaveBooking}
+          onCheckInReservation={store.actions.checkInAdvanceReservation}
           onLookupPhone={store.actions.findGuestByPhone}
           onCalculateGST={store.actions.calculateGST}
           getRateForRoom={store.actions.getRateForRoom}

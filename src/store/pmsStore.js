@@ -656,6 +656,86 @@ export function usePMSStore() {
     };
   };
 
+  // 5c. Confirm Arrival Check-In for an Advance Reservation
+  const checkInAdvanceReservation = (bookingId, {
+    additionalAdvance = 0,
+    paymentMode = 'Cash',
+    guestIdPhotoUrl = null,
+    guestIdBackPhotoUrl = null,
+    guestIdType = null,
+    guestIdNumber = null,
+    guestAddress = null,
+    acOrNonAc = null
+  } = {}) => {
+    const booking = (state.bookings || {})[bookingId];
+    if (!booking) return null;
+
+    const room = (state.rooms || []).find(r => r.id === booking.room_id);
+    const guest = (state.guests || []).find(g => g.id === booking.guest_id);
+    const authorStaff = currentStaff?.name || 'Receptionist';
+    const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+
+    let updatedGuests = [...(state.guests || [])];
+    if (guest && (guestIdPhotoUrl || guestIdNumber || guestAddress)) {
+      updatedGuests = updatedGuests.map(g => {
+        if (g.id === guest.id) {
+          return {
+            ...g,
+            address: guestAddress || g.address,
+            id_proof_type: guestIdType || g.id_proof_type,
+            id_proof_number: guestIdNumber || g.id_proof_number,
+            id_proof_photo_url: guestIdPhotoUrl || g.id_proof_photo_url,
+            id_proof_back_photo_url: guestIdBackPhotoUrl || g.id_proof_back_photo_url,
+            id_verified_at: guestIdPhotoUrl ? nowTimestamp : g.id_verified_at,
+            id_verified_by_staff: guestIdPhotoUrl ? authorStaff : g.id_verified_by_staff
+          };
+        }
+        return g;
+      });
+    }
+
+    const totalAdvance = Number(booking.advance_paid || 0) + Number(additionalAdvance || 0);
+
+    const updatedBooking = {
+      ...booking,
+      status: 'checked_in',
+      check_in_date: nowTimestamp,
+      ac_or_non_ac: acOrNonAc || booking.ac_or_non_ac,
+      advance_paid: totalAdvance,
+      payment_mode: paymentMode || booking.payment_mode,
+      checked_in_at: nowTimestamp,
+      checked_in_by_staff: authorStaff
+    };
+
+    const auditEntry = logAudit(
+      'RESERVATION_CHECKED_IN',
+      `Room ${room?.room_number || booking.room_id}`,
+      `Advance reservation for ${guest?.name || 'Guest'} checked in to Room ${room?.room_number}. Advance: ₹${totalAdvance}. Staff: ${authorStaff}.`
+    );
+
+    setState(prev => ({
+      ...prev,
+      guests: updatedGuests,
+      bookings: {
+        ...(prev.bookings || {}),
+        [bookingId]: updatedBooking
+      },
+      rooms: (prev.rooms || []).map(r => {
+        if (r.id === booking.room_id) {
+          return {
+            ...r,
+            status: 'occupied',
+            current_booking_id: bookingId
+          };
+        }
+        return r;
+      }),
+      auditLogs: [auditEntry, ...(prev.auditLogs || [])]
+    }));
+
+    return updatedBooking;
+  };
+
   // 6. Checkout & Billing with Optional Concession / Discount
   const checkoutAndGenerateInvoice = (roomId, { paymentMode, notes, billed_by_staff_name, discountAmount = 0, discountType = 'flat', discountReason = '' }) => {
     const room = (state.rooms || []).find(r => r.id === roomId);
@@ -1085,6 +1165,7 @@ export function usePMSStore() {
       getRateForRoom,
       calculateGST,
       createBooking,
+      checkInAdvanceReservation,
       extendBookingStay,
       checkoutAndGenerateInvoice,
       advanceHousekeepingStatus,

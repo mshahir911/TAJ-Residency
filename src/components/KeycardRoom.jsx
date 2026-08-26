@@ -340,7 +340,7 @@ export default function KeycardRoom({
         {isReserved && (
           <button
             type="button"
-            onClick={() => onNewBooking(room)}
+            onClick={() => onNewBooking(room, guest, booking)}
             className="w-full py-2 px-2 rounded-xl bg-signal-amber text-ink font-bold text-[11px] sm:text-xs hover:brightness-110 active:scale-95 transition-all shadow-md shadow-signal-amber/20 flex items-center justify-center gap-1 cursor-pointer"
           >
             <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
