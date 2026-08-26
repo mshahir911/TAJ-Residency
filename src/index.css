@@ -173,7 +173,7 @@ body {
 }
 
 .min-h-0 {
-  min-h: 0;
+  min-height: 0;
 }
 
 .hidden {
