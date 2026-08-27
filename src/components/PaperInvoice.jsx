@@ -300,8 +300,7 @@ _Thank you for choosing Taj Residency!_`;
                 Stay Period
               </span>
               <div><span className="text-slate-500">Check-In:</span> {booking?.check_in_date || '2026-08-07 14:00'}</div>
-              <div><span className="text-slate-500">Check-Out:</span> {booking?.check_out_date || '2026-08-09 11:00'}</div>
-              <div><span className="text-slate-500">Total Duration:</span> {nights} Day(s)</div>
+              <div><span className="text-slate-500">Total Duration:</span> {nights} Night(s) (12:00 PM Noon Basis)</div>
               <div><span className="text-slate-500">Payment Mode:</span> {paymentMode}</div>
             </div>
           </div>

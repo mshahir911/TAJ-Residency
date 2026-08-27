@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ROOM_TYPES } from '../types/data';
 import { formatCurrency } from '../utils/formatters';
+import { calculateCheckoutBilling } from '../utils/billing';
 
 export default function KeycardRoom({
   room,
@@ -180,6 +181,30 @@ export default function KeycardRoom({
                   </button>
                 )}
               </div>
+
+              {/* Checkout Due Deadline Indicator */}
+              {(() => {
+                const billing = calculateCheckoutBilling({
+                  checkInDate: booking.check_in_date,
+                  plannedNights: booking.nights || 1
+                });
+                return (
+                  <div className={`mt-1 px-1.5 py-0.5 rounded flex items-center justify-between font-mono text-[8.5px] sm:text-[9.5px] border ${
+                    billing.isOverdue
+                      ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                      : 'bg-panel-raised border-brass-soft/30 text-slate-300'
+                  }`}>
+                    <span className="truncate">
+                      Checkout due: <strong className={billing.isOverdue ? 'text-rose-200 font-bold' : 'text-white font-semibold'}>{billing.scheduledDeadlineDisplay}</strong>
+                    </span>
+                    {billing.isOverdue && (
+                      <span className="text-[7.5px] font-black uppercase text-rose-400 shrink-0 ml-1">
+                        +1N Late
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

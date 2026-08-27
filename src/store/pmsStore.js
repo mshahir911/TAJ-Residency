@@ -36,6 +36,7 @@ import {
 import { realtimeRelay } from '../services/realtimeRelay.js';
 import { isSupabaseConfigured } from '../lib/supabaseClient.js';
 import { getBusinessDateIST } from '../utils/formatters.js';
+import { calculateCheckoutBilling } from '../utils/billing.js';
 
 const LOCAL_FALLBACK_CACHE_KEY = 'taj_residency_pms_v7_pg_cache';
 
@@ -1153,7 +1154,14 @@ export function usePMSStore() {
     if (!booking) return;
 
     const guest = (state.guests || []).find(g => g.id === booking.guest_id);
-    const nights = booking.nights || 1;
+
+    // Apply hotel-standard noon-to-noon billing rules (12:00 PM cutoff)
+    const billingInfo = calculateCheckoutBilling({
+      checkInDate: booking.check_in_date,
+      plannedNights: booking.nights || 1,
+      checkoutTimestamp: new Date()
+    });
+    const nights = Math.max(booking.nights || 1, billingInfo.billableNights);
     const grossRoomCharge = booking.rate_applied * nights;
 
     const finalDiscount = Number(discountAmount) || 0;

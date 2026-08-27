@@ -30,8 +30,9 @@ import {
   BadgeCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ROOM_TYPES } from '../types/data';
+import { ROOM_TYPES, DEFAULT_GST_CONFIG } from '../types/data';
 import { formatCurrency } from '../utils/formatters';
+import { formatDeadlineDisplay } from '../utils/billing';
 import IdPhotoCaptureWidget from './IdPhotoCaptureWidget';
 
 export default function WalkInModal({
@@ -346,11 +347,11 @@ export default function WalkInModal({
       return;
     }
 
-    // Case 2: Standard Walk-In or Pre-Booking
+    // Case 2: Standard Walk-In or Pre-Booking (Hotel Standard Noon 12:00 PM Deadline)
     const now = new Date();
     const checkInStr = now.toISOString().replace('T', ' ').slice(0, 16);
-    const checkOutDateObj = new Date(now.getTime() + totalNights * 24 * 60 * 60 * 1000);
-    const checkOutStr = checkOutDateObj.toISOString().replace('T', ' ').slice(0, 16);
+    const checkOutDateObj = new Date(now.getFullYear(), now.getMonth(), now.getDate() + totalNights, 12, 0, 0);
+    const checkOutStr = `${checkOutDateObj.toLocaleDateString('en-CA')} 12:00`;
 
     const saveFn = onSaveBooking || onSubmit;
     if (typeof saveFn === 'function') {
@@ -906,6 +907,23 @@ export default function WalkInModal({
                           </div>
                         </div>
                       )}
+
+                      {/* Noon-to-Noon Standard Checkout Notice */}
+                      {(() => {
+                        const now = new Date();
+                        const checkoutDue = new Date(now.getFullYear(), now.getMonth(), now.getDate() + totalNights, 12, 0, 0);
+                        return (
+                          <div className="mt-2 p-2 rounded-lg bg-panel border border-brass-soft/30 flex items-center justify-between text-[10px] font-mono text-slate-300">
+                            <span className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-brass" />
+                              <span>Checkout due: <strong className="text-white font-semibold">{formatDeadlineDisplay(checkoutDue)}</strong></span>
+                            </span>
+                            <span className="text-[9px] text-brass uppercase font-bold tracking-wider">
+                              12:00 PM Standard
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
