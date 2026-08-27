@@ -1,5 +1,5 @@
 // Taj Residency FrontDesk OS — Offline-Resilient Service Worker
-const CACHE_NAME = 'taj-pms-cache-v2';
+const CACHE_NAME = 'taj-pms-cache-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
