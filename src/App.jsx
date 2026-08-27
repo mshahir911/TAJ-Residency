@@ -293,7 +293,14 @@ export default function App() {
             {activeTab === 'collections' && store.currentRole !== 'housekeeping' && (
               <DailyCollectionsReport
                 invoices={store.invoices}
+                bookings={store.bookings}
+                rooms={store.rooms}
+                expenses={store.expenses}
+                shiftLogs={store.shiftLogs}
+                auditLogs={store.auditLogs}
                 stats={store.stats}
+                currentBusinessDay={store.currentBusinessDay}
+                onGetReconciliationForDate={store.actions.getReconciliationForDate}
                 gstConfig={store.gstConfig}
                 onUpdateGST={store.actions.updateGSTConfig}
                 property={store.property}

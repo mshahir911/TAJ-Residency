@@ -367,3 +367,41 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
+-- ============================================================================
+-- 7. END-OF-DAY AUDIT ARCHIVE & 12:00 AM IST PG_CRON SCHEDULE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.eod_reports (
+  id TEXT PRIMARY KEY,
+  property_id TEXT REFERENCES public.properties(id) ON DELETE CASCADE,
+  report_date DATE NOT NULL,
+  total_revenue NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  cash_revenue NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  upi_revenue NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  card_revenue NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  gst_collected NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  concessions_total NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  check_ins_count INTEGER NOT NULL DEFAULT 0,
+  check_outs_count INTEGER NOT NULL DEFAULT 0,
+  occupancy_pct INTEGER NOT NULL DEFAULT 0,
+  cash_discrepancy NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  summary_text TEXT,
+  report_html TEXT,
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+  CONSTRAINT unique_property_report_date UNIQUE (property_id, report_date)
+);
+
+ALTER TABLE public.eod_reports ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_eod_reports_all" ON public.eod_reports FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+ALTER TABLE public.eod_reports REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.eod_reports;
+  END IF;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+

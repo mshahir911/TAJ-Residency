@@ -35,8 +35,127 @@ import {
 } from '../services/supabaseService.js';
 import { realtimeRelay } from '../services/realtimeRelay.js';
 import { isSupabaseConfigured } from '../lib/supabaseClient.js';
+import { getBusinessDateIST } from '../utils/formatters.js';
 
 const LOCAL_FALLBACK_CACHE_KEY = 'taj_residency_pms_v7_pg_cache';
+
+/**
+ * Calculates complete end-of-day reconciliation for a specific business date (YYYY-MM-DD)
+ */
+export function calculateReconciliationForDate(dateStr, {
+  invoices = [],
+  bookings = {},
+  rooms = [],
+  expenses = [],
+  shiftLogs = [],
+  auditLogs = []
+}) {
+  const targetDate = (dateStr || getBusinessDateIST()).slice(0, 10);
+  
+  // 1. Invoices settled on targetDate
+  const dateInvoices = (invoices || []).filter(inv => (inv.paid_at || '').slice(0, 10) === targetDate);
+  
+  // 2. Advances received on targetDate
+  const allBookings = Object.values(bookings || {});
+  const dateBookingsWithAdvance = allBookings.filter(b => {
+    const createdDate = (b.created_at || b.check_in_date || '').slice(0, 10);
+    return createdDate === targetDate && Number(b.advance_paid) > 0;
+  });
+
+  let cashCollections = 0;
+  let upiCollections = 0;
+  let cardCollections = 0;
+  let totalBilledNights = 0;
+  let grossRoomCharge = 0;
+  let discountTotal = 0;
+  let gstTotal = 0;
+  let cgstTotal = 0;
+  let sgstTotal = 0;
+
+  // Tally settled balances from invoices
+  dateInvoices.forEach(inv => {
+    const settled = Number(inv.balance_settled !== undefined ? inv.balance_settled : inv.total) || 0;
+    const mode = (inv.payment_mode || 'UPI').toLowerCase();
+    if (mode.includes('cash')) {
+      cashCollections += settled;
+    } else if (mode.includes('upi') || mode.includes('gpay') || mode.includes('phonepe') || mode.includes('qr')) {
+      upiCollections += settled;
+    } else {
+      cardCollections += settled;
+    }
+
+    grossRoomCharge += Number(inv.gross_room_charge || inv.room_charge || 0);
+    discountTotal += Number(inv.discount_amount || 0);
+    gstTotal += Number(inv.gst_amount || 0);
+    cgstTotal += Number(inv.cgst_amount || 0);
+    sgstTotal += Number(inv.sgst_amount || 0);
+    totalBilledNights += Number(inv.nights || 1);
+  });
+
+  // Tally advance deposits received today
+  dateBookingsWithAdvance.forEach(b => {
+    const adv = Number(b.advance_paid || 0);
+    const mode = (b.payment_mode || 'UPI').toLowerCase();
+    if (mode.includes('cash')) {
+      cashCollections += adv;
+    } else if (mode.includes('upi') || mode.includes('gpay') || mode.includes('phonepe') || mode.includes('qr')) {
+      upiCollections += adv;
+    } else {
+      cardCollections += adv;
+    }
+  });
+
+  const totalCollections = cashCollections + upiCollections + cardCollections;
+
+  // 3. Operational Counts on targetDate
+  const checkInsCount = allBookings.filter(b => (b.check_in_date || '').slice(0, 10) === targetDate).length;
+  const checkOutsCount = dateInvoices.length;
+  const totalRooms = rooms.length || 11;
+  const occupiedOnDate = allBookings.filter(b => {
+    const checkIn = (b.check_in_date || '').slice(0, 10);
+    const checkOut = (b.check_out_date || '').slice(0, 10);
+    return checkIn <= targetDate && checkOut >= targetDate && b.status !== 'cancelled';
+  }).length;
+  const occupancyPct = Math.min(100, Math.round((occupiedOnDate / totalRooms) * 100));
+
+  // 4. Shift Logs on targetDate
+  const dateShiftLogs = (shiftLogs || []).filter(s => (s.date || '').slice(0, 10) === targetDate);
+  const totalDiscrepancy = dateShiftLogs.reduce((sum, s) => sum + Number(s.discrepancy || 0), 0);
+
+  // 5. Audit Flags on targetDate
+  const dateAuditLogs = (auditLogs || []).filter(a => (a.timestamp || '').slice(0, 10) === targetDate);
+
+  // 6. Expenses on targetDate
+  const dateExpenses = (expenses || []).filter(e => (e.date || '').slice(0, 10) === targetDate);
+  const totalExpenses = dateExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+  return {
+    date: targetDate,
+    totalCollections,
+    cashCollections,
+    upiCollections,
+    cardCollections,
+    grossRoomCharge,
+    discountTotal,
+    gstTotal,
+    cgstTotal,
+    sgstTotal,
+    totalBilledNights,
+    checkInsCount,
+    checkOutsCount,
+    occupancyPct,
+    occupiedRoomsCount: occupiedOnDate,
+    totalRooms,
+    invoices: dateInvoices,
+    advanceBookings: dateBookingsWithAdvance,
+    shiftLogs: dateShiftLogs,
+    totalDiscrepancy,
+    auditLogs: dateAuditLogs,
+    expenses: dateExpenses,
+    totalExpenses,
+    netCashInDrawer: cashCollections - totalExpenses
+  };
+}
 
 export function usePMSStore() {
   const getInitialData = () => ({
@@ -106,10 +225,26 @@ export function usePMSStore() {
 
   // Real-Time Supabase Sync & Queue Status State
   const [realtimeStatus, setRealtimeStatus] = useState({
-    status: 'connecting', // 'connected' | 'connecting' | 'offline' | 'error'
+    status: 'connecting',
+    relayConnected: false,
     lastEventAt: null,
     connectedDevicesCount: 2
   });
+
+  // Current Business Day in Indian Standard Time (IST, UTC+5:30)
+  const [currentBusinessDay, setCurrentBusinessDay] = useState(() => getBusinessDateIST());
+
+  // Midnight IST Rollover Timer: checks every 30 seconds if date has flipped past 12:00 AM IST
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const latestDate = getBusinessDateIST();
+      if (latestDate !== currentBusinessDay) {
+        console.log(`[PMS Store] 🌙 Midnight IST Rollover: ${currentBusinessDay} -> ${latestDate}`);
+        setCurrentBusinessDay(latestDate);
+      }
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [currentBusinessDay]);
 
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
 
@@ -1298,24 +1433,21 @@ export function usePMSStore() {
   const occupancyWeekPct = Math.min(100, Math.round(occupancyPct * 1.12));
   const occupancyMonthPct = Math.min(100, Math.round(occupancyPct * 0.94));
 
-  let totalRevenueToday = 0;
-  let cashRevenue = 0;
-  let upiRevenue = 0;
-  let cardRevenue = 0;
-  let totalBilledNights = 0;
-
-  scopedInvoices.forEach(inv => {
-    totalRevenueToday += (inv.total || 0);
-    totalBilledNights += (inv.nights || 1);
-    const mode = (inv.payment_mode || '').toLowerCase();
-    if (mode.includes('cash')) {
-      cashRevenue += (inv.total || 0);
-    } else if (mode.includes('upi') || mode.includes('gpay') || mode.includes('phonepe')) {
-      upiRevenue += (inv.total || 0);
-    } else {
-      cardRevenue += (inv.total || 0);
-    }
+  // Scope Collections strictly to Current Business Day in IST
+  const todayReconciliation = calculateReconciliationForDate(currentBusinessDay, {
+    invoices: scopedInvoices,
+    bookings: state.bookings,
+    rooms: scopedRooms,
+    expenses: scopedExpenses,
+    shiftLogs: scopedShiftLogs,
+    auditLogs: scopedAuditLogs
   });
+
+  const totalRevenueToday = todayReconciliation.totalCollections;
+  const cashRevenue = todayReconciliation.cashCollections;
+  const upiRevenue = todayReconciliation.upiCollections;
+  const cardRevenue = todayReconciliation.cardCollections;
+  const totalBilledNights = todayReconciliation.totalBilledNights;
 
   const adr = totalBilledNights > 0 ? Math.round(totalRevenueToday / totalBilledNights) : 1850;
   const revPar = Math.round(totalRevenueToday / totalRooms);
@@ -1354,6 +1486,11 @@ export function usePMSStore() {
     cashRevenue,
     upiRevenue,
     cardRevenue,
+    todayCheckIns: todayReconciliation.checkInsCount,
+    todayCheckOuts: todayReconciliation.checkOutsCount,
+    todayGstCollected: todayReconciliation.gstTotal,
+    todayConcessions: todayReconciliation.discountTotal,
+    todayReconciliation,
     adr,
     revPar,
     repeatGuestPct,
@@ -1378,6 +1515,8 @@ export function usePMSStore() {
     selfCheckins: scopedSelfCheckins,
     roleConfig: STAFF_ROLES[currentRole] || STAFF_ROLES.receptionist,
     stats,
+    currentBusinessDay,
+    todayReconciliation,
     syncStatus: {
       status: realtimeStatus.relayConnected || realtimeStatus.status === 'connected' ? 'connected' : (realtimeStatus.status === 'offline' ? 'offline' : 'connecting'),
       channel: realtimeStatus.status === 'connected' ? 'postgres_changes (supabase)' : 'realtime_bus (active)',
@@ -1421,6 +1560,14 @@ export function usePMSStore() {
         }
         return false;
       },
+      getReconciliationForDate: (dateStr) => calculateReconciliationForDate(dateStr, {
+        invoices: scopedInvoices,
+        bookings: state.bookings,
+        rooms: scopedRooms,
+        expenses: scopedExpenses,
+        shiftLogs: scopedShiftLogs,
+        auditLogs: scopedAuditLogs
+      }),
       loginStaff,
       quickSwitchStaff,
       setViewMode,
