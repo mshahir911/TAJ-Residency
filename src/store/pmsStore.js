@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   STAFF_CREDENTIALS,
   SEED_PROPERTIES,
@@ -16,14 +16,31 @@ import {
   SEED_SEASONAL_OVERRIDES,
   SEED_HEATMAP_DATA
 } from '../types/data';
-import { syncService } from '../services/syncService';
+import {
+  saveRoomToSupabase,
+  saveBookingToSupabase,
+  saveGuestToSupabase,
+  saveInvoiceToSupabase,
+  saveExpenseToSupabase,
+  saveShiftLogToSupabase,
+  saveAuditLogToSupabase,
+  saveSeasonalOverrideToSupabase,
+  deleteSeasonalOverrideFromSupabase,
+  fetchInitialDataset,
+  subscribeToSupabaseRealtime,
+  migrateLegacyLocalStorageToSupabase,
+  getOfflineQueue,
+  flushOfflineQueue,
+  testSupabaseConnection
+} from '../services/supabaseService';
+import { isSupabaseConfigured } from '../lib/supabaseClient';
 
-const STORAGE_KEY = 'taj_residency_pms_v6_safe_auth';
+const LOCAL_FALLBACK_CACHE_KEY = 'taj_residency_pms_v7_pg_cache';
 
 export function usePMSStore() {
   const getInitialData = () => ({
-    currentStaffId: 'staff-rec-01', // Default to Anoop Nair (Day Shift Receptionist)
-    viewMode: 'app', // 'app' | 'marketing'
+    currentStaffId: 'staff-rec-01',
+    viewMode: 'app',
     activePropertyId: 'taj-residency-calicut',
     staffList: STAFF_CREDENTIALS,
     properties: SEED_PROPERTIES,
@@ -48,10 +65,11 @@ export function usePMSStore() {
     isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true
   });
 
+  // State initialization with local offline fallback cache
   const [state, setState] = useState(() => {
     const initial = getInitialData();
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(LOCAL_FALLBACK_CACHE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         return {
@@ -73,49 +91,39 @@ export function usePMSStore() {
         };
       }
     } catch (e) {
-      console.warn('Failed to parse local storage state:', e);
+      console.warn('Failed to parse local fallback cache:', e);
     }
     return initial;
   });
 
-  // Local-first persistent write & cross-device broadcast
+  // Transient offline backup cache
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      syncService.broadcast(state, 'STATE_UPDATE');
-    } catch (e) {
-      console.error('LocalStorage write error:', e);
-    }
+      localStorage.setItem(LOCAL_FALLBACK_CACHE_KEY, JSON.stringify(state));
+    } catch (e) {}
   }, [state]);
 
-  // Real-Time Cross-Device Synchronization Listener (Desk <-> Mobile)
-  const [syncStatus, setSyncStatus] = useState({
-    status: 'local',
-    lastSyncedAt: null,
-    connectedDevicesCount: 1,
-    deviceId: syncService.getDeviceId()
+  // Real-Time Supabase Sync & Queue Status State
+  const [realtimeStatus, setRealtimeStatus] = useState({
+    status: 'connecting', // 'connected' | 'connecting' | 'offline' | 'error'
+    lastEventAt: null,
+    connectedDevicesCount: 2
   });
 
-  useEffect(() => {
-    syncService.init(
-      (remoteState, actionName, source) => {
-        setState(prev => ({
-          ...prev,
-          ...remoteState,
-          currentStaffId: prev.currentStaffId,
-          viewMode: prev.viewMode
-        }));
-      },
-      (statusInfo) => {
-        setSyncStatus(statusInfo);
-      }
-    );
-  }, []);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
 
-  // Online / Offline listener
+  // Online / Offline window listeners
   useEffect(() => {
-    const handleOnline = () => setState(p => ({ ...p, isOnline: true }));
-    const handleOffline = () => setState(p => ({ ...p, isOnline: false }));
+    const handleOnline = () => {
+      setState(p => ({ ...p, isOnline: true }));
+      flushOfflineQueue().then(({ remainingCount }) => {
+        setOfflineQueueCount(remainingCount || 0);
+      });
+    };
+    const handleOffline = () => {
+      setState(p => ({ ...p, isOnline: false }));
+      setRealtimeStatus(p => ({ ...p, status: 'offline' }));
+    };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -124,15 +132,161 @@ export function usePMSStore() {
     };
   }, []);
 
+  // Handle incoming Supabase Realtime table changes (postgres_changes)
+  const handleRealtimeTableChange = useCallback(({ table, eventType, newRecord, oldRecord }) => {
+    setState(prev => {
+      if (table === 'rooms' && newRecord) {
+        const updatedRooms = (prev.rooms || []).map(r => (r.id === newRecord.id ? { ...r, ...newRecord } : r));
+        return { ...prev, rooms: updatedRooms };
+      }
+
+      if (table === 'bookings') {
+        if (eventType === 'DELETE') {
+          const nextBookings = { ...(prev.bookings || {}) };
+          delete nextBookings[oldRecord?.id || newRecord?.id];
+          return { ...prev, bookings: nextBookings };
+        }
+        if (newRecord) {
+          return {
+            ...prev,
+            bookings: {
+              ...(prev.bookings || {}),
+              [newRecord.id]: newRecord
+            }
+          };
+        }
+      }
+
+      if (table === 'guests' && newRecord) {
+        const exists = (prev.guests || []).some(g => g.id === newRecord.id);
+        const nextGuests = exists
+          ? prev.guests.map(g => (g.id === newRecord.id ? { ...g, ...newRecord } : g))
+          : [newRecord, ...(prev.guests || [])];
+        return { ...prev, guests: nextGuests };
+      }
+
+      if (table === 'invoices' && newRecord) {
+        const exists = (prev.invoices || []).some(i => i.id === newRecord.id);
+        const nextInvoices = exists
+          ? prev.invoices.map(i => (i.id === newRecord.id ? { ...i, ...newRecord } : i))
+          : [newRecord, ...(prev.invoices || [])];
+        return { ...prev, invoices: nextInvoices };
+      }
+
+      if (table === 'expenses' && newRecord) {
+        const exists = (prev.expenses || []).some(e => e.id === newRecord.id);
+        const nextExpenses = exists
+          ? prev.expenses.map(e => (e.id === newRecord.id ? { ...e, ...newRecord } : e))
+          : [newRecord, ...(prev.expenses || [])];
+        return { ...prev, expenses: nextExpenses };
+      }
+
+      if (table === 'shift_logs' && newRecord) {
+        const exists = (prev.shiftLogs || []).some(s => s.id === newRecord.id);
+        const nextShifts = exists
+          ? prev.shiftLogs.map(s => (s.id === newRecord.id ? { ...s, ...newRecord } : s))
+          : [newRecord, ...(prev.shiftLogs || [])];
+        return { ...prev, shiftLogs: nextShifts };
+      }
+
+      if (table === 'audit_logs' && newRecord) {
+        const exists = (prev.auditLogs || []).some(a => a.id === newRecord.id);
+        if (!exists) {
+          return {
+            ...prev,
+            auditLogs: [newRecord, ...(prev.auditLogs || [])]
+          };
+        }
+      }
+
+      if (table === 'seasonal_overrides') {
+        if (eventType === 'DELETE') {
+          return {
+            ...prev,
+            seasonalOverrides: (prev.seasonalOverrides || []).filter(o => o.id !== (oldRecord?.id || newRecord?.id))
+          };
+        }
+        if (newRecord) {
+          const exists = (prev.seasonalOverrides || []).some(o => o.id === newRecord.id);
+          const nextOverrides = exists
+            ? prev.seasonalOverrides.map(o => (o.id === newRecord.id ? { ...o, ...newRecord } : o))
+            : [newRecord, ...(prev.seasonalOverrides || [])];
+          return { ...prev, seasonalOverrides: nextOverrides };
+        }
+      }
+
+      return prev;
+    });
+  }, []);
+
+  // Supabase Initialization: One-Time Legacy Migration + Authoritative Fetch + Realtime Subscription
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initSupabasePipeline() {
+      // 1. Check & execute one-time migration of any legacy localStorage data
+      await migrateLegacyLocalStorageToSupabase(state.activePropertyId);
+
+      // 2. Fetch authoritative initial dataset from PostgreSQL
+      const dataset = await fetchInitialDataset(state.activePropertyId);
+      if (isMounted && dataset.isLoaded && dataset.hasData) {
+        setState(prev => ({
+          ...prev,
+          rooms: dataset.rooms || prev.rooms,
+          bookings: dataset.bookings || prev.bookings,
+          guests: dataset.guests || prev.guests,
+          invoices: dataset.invoices || prev.invoices,
+          expenses: dataset.expenses || prev.expenses,
+          shiftLogs: dataset.shiftLogs || prev.shiftLogs,
+          auditLogs: dataset.auditLogs || prev.auditLogs,
+          seasonalOverrides: dataset.seasonalOverrides || prev.seasonalOverrides
+        }));
+      }
+
+      // 3. Flush any pending offline queue items
+      const { remainingCount } = await flushOfflineQueue();
+      if (isMounted) {
+        setOfflineQueueCount(remainingCount || 0);
+      }
+    }
+
+    initSupabasePipeline();
+
+    // 4. Subscribe to Realtime postgres_changes
+    const unsubscribe = subscribeToSupabaseRealtime({
+      onTableChange: ({ table, eventType, newRecord, oldRecord }) => {
+        if (!isMounted) return;
+        handleRealtimeTableChange({ table, eventType, newRecord, oldRecord });
+        setRealtimeStatus(prev => ({
+          ...prev,
+          lastEventAt: new Date().toISOString()
+        }));
+      },
+      onStatusChange: ({ status, error }) => {
+        if (!isMounted) return;
+        setRealtimeStatus(prev => ({
+          ...prev,
+          status: status === 'SUBSCRIBED' ? 'connected' : (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' ? 'error' : status.toLowerCase()),
+          error
+        }));
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [state.activePropertyId, handleRealtimeTableChange]);
+
   // Safe staff and role resolution
   const staffList = Array.isArray(state.staffList) && state.staffList.length > 0 ? state.staffList : STAFF_CREDENTIALS;
   const currentStaff = staffList.find(s => s.id === state.currentStaffId) || staffList[1] || staffList[0] || STAFF_CREDENTIALS[0];
   const currentRole = currentStaff?.role || 'receptionist';
 
-  // Helper: Append immutable audit log
+  // Helper: Append immutable audit log (Writes directly to Supabase)
   const logAudit = (action, target, details, staffRole = currentRole, staffName = currentStaff?.name || 'Staff') => {
     const newLog = {
-      id: 'aud-' + Date.now(),
+      id: 'aud-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
       property_id: state.activePropertyId || 'taj-residency-calicut',
       timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
       staff_role: staffRole === 'owner' ? 'Owner' : (staffRole === 'housekeeping' ? 'Housekeeping' : 'Receptionist'),
@@ -141,307 +295,238 @@ export function usePMSStore() {
       target,
       details
     };
+
+    saveAuditLogToSupabase(newLog).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
+
     return newLog;
   };
 
-  // Staff Authentication & Switcher Actions
-  const loginStaff = (identifier, pinOrPass) => {
-    const cleanId = (identifier || '').toLowerCase().trim();
-    const cleanPass = (pinOrPass || '').trim();
+  // Helper: WiFi Voucher Code Generator
+  const generateWiFiCode = (roomNumber) => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let randPart = '';
+    for (let i = 0; i < 4; i++) {
+      randPart += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `TR-WIFI-${roomNumber}-${randPart}`;
+  };
 
-    const matched = staffList.find(s => {
-      const matchId =
-        (s.username && s.username.toLowerCase() === cleanId) ||
-        (s.id && s.id.toLowerCase() === cleanId) ||
-        (s.email && s.email.toLowerCase() === cleanId) ||
-        (s.aliases && s.aliases.some(a => a.toLowerCase() === cleanId)) ||
-        (s.phone && s.phone.replace(/[^0-9]/g, '').includes(cleanId.replace(/[^0-9]/g, ''))) ||
-        (s.pin === cleanId) ||
-        (s.name && s.name.toLowerCase().includes(cleanId));
-
-      if (!matchId) return false;
-      if (!cleanPass) return true; // Direct 1-tap demo test pass
-
-      const matchPass =
-        s.password === cleanPass ||
-        s.rawPassword === cleanPass ||
-        s.pin === cleanPass ||
-        cleanPass === '123' ||
-        cleanPass === '1234' ||
-        cleanPass === 'admin' ||
-        cleanPass === 'demo';
-
-      return matchPass;
-    });
-
+  // 1. Staff Authentication
+  const loginStaff = (pin) => {
+    const matched = staffList.find(s => s.pin === pin);
     if (matched) {
       const auditEntry = logAudit(
         'STAFF_LOGIN',
-        matched.name,
-        `Signed in as ${matched.name} (${matched.roleLabel}). Session authenticated.`
+        `Terminal PIN Login`,
+        `Staff ${matched.name} (${matched.role.toUpperCase()}) logged in from IP Counter.`
       );
-
       setState(prev => ({
         ...prev,
         currentStaffId: matched.id,
-        currentShift: matched.role === 'receptionist' ? {
-          ...prev.currentShift,
-          staffName: matched.name,
-          name: matched.shift
-        } : prev.currentShift,
         auditLogs: [auditEntry, ...(prev.auditLogs || [])]
       }));
       return { success: true, staff: matched };
     }
-    return { success: false, message: 'Invalid Staff ID or Password. Try simple test ID (owner, anoop, suresh, meera) with pass: 123' };
+    return { success: false, error: 'Invalid PIN' };
   };
 
   const quickSwitchStaff = (staffId) => {
-    const targetStaff = staffList.find(s => s.id === staffId);
-    if (!targetStaff) return;
-
+    const target = staffList.find(s => s.id === staffId);
+    if (!target) return;
     const auditEntry = logAudit(
-      'STAFF_LOGIN',
-      targetStaff.name,
-      `Switched session to ${targetStaff.name} (${targetStaff.roleLabel}). Access scoped to ${targetStaff.role.toUpperCase()}.`
+      'STAFF_SWITCH',
+      `Counter Shift Handover`,
+      `Active operator switched to ${target.name} (${target.role.toUpperCase()}).`
     );
-
     setState(prev => ({
       ...prev,
       currentStaffId: staffId,
-      currentShift: targetStaff.role === 'receptionist' ? {
-        ...prev.currentShift,
-        staffName: targetStaff.name,
-        name: targetStaff.shift
-      } : prev.currentShift,
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
-  };
-
-  // 1-Click Reset Demo Data
-  const resetDemoData = () => {
-    const fresh = getInitialData();
-    fresh.viewMode = 'app';
-    setState(fresh);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch (e) { }
   };
 
   const setViewMode = (mode) => {
-    setState(prev => ({
-      ...prev,
-      viewMode: mode
-    }));
+    setState(prev => ({ ...prev, viewMode: mode }));
   };
 
-  // Active property lookup
-  const propertiesList = Array.isArray(state.properties) && state.properties.length > 0 ? state.properties : SEED_PROPERTIES;
-  const activeProperty = propertiesList.find(p => p.id === state.activePropertyId) || propertiesList[0] || SEED_PROPERTIES[0];
-
-  // Property-scoped entities
-  const scopedRooms = (state.rooms || SEED_ROOMS).filter(r => r.property_id === state.activePropertyId);
-  const scopedInvoices = (state.invoices || SEED_INVOICES).filter(i => i.property_id === state.activePropertyId);
-  const scopedExpenses = (state.expenses || SEED_EXPENSES).filter(e => e.property_id === state.activePropertyId);
-  const scopedOverrides = (state.seasonalOverrides || SEED_SEASONAL_OVERRIDES).filter(o => o.property_id === state.activePropertyId);
-  const scopedShiftLogs = (state.shiftLogs || SEED_SHIFT_LOGS).filter(s => (s.property_id || state.activePropertyId) === state.activePropertyId);
-  const scopedAuditLogs = (state.auditLogs || SEED_AUDIT_LOGS).filter(a => (a.property_id || state.activePropertyId) === state.activePropertyId);
-  const scopedSelfCheckins = (state.selfCheckins || SEED_SELF_CHECKINS).filter(c => (c.property_id || state.activePropertyId) === state.activePropertyId);
-
-  // Helper: Generate WiFi Voucher code for a room
-  const generateWiFiCode = (roomNumber) => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let rand = '';
-    for (let i = 0; i < 4; i++) {
-      rand += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    const prefix = activeProperty.name?.includes('Malabar') ? 'MH' : 'TR';
-    return `${prefix}-WIFI-${roomNumber}-${rand}`;
+  const resetDemoData = () => {
+    localStorage.removeItem(LOCAL_FALLBACK_CACHE_KEY);
+    localStorage.removeItem('taj_pms_migrated_to_supabase_v2');
+    setState(getInitialData());
   };
 
-  // Helper: Look up guest by phone number
-  const findGuestByPhone = (phone) => {
-    if (!phone || phone.length < 5) return null;
-    const cleanQuery = phone.replace(/[^0-9]/g, '');
-    return (state.guests || SEED_GUESTS).find(g => {
-      const cleanGPhone = (g.phone || '').replace(/[^0-9]/g, '');
-      return cleanGPhone.includes(cleanQuery) || cleanGPhone.slice(-10) === cleanQuery.slice(-10);
-    }) || null;
-  };
-
-  // Helper: Dynamic Rate lookup with Seasonal Override check
-  const getRateForRoom = (roomTypeId, acOrNonAc, checkInDate = new Date().toISOString().slice(0, 10)) => {
-    const roomType = (state.roomTypes && state.roomTypes[roomTypeId]) || ROOM_TYPES.deluxe || { ac_rate: 2000, non_ac_rate: 1500 };
-
-    const checkDateStr = (checkInDate || '').slice(0, 10);
-    const activeOverride = scopedOverrides.find(ovr => {
-      if (!ovr.is_active || ovr.room_type_id !== roomTypeId) return false;
-      return checkDateStr >= ovr.start_date && checkDateStr <= ovr.end_date;
-    });
-
-    if (activeOverride) {
-      const overrideRate = acOrNonAc === 'AC' ? activeOverride.override_ac_rate : activeOverride.override_non_ac_rate;
-      return {
-        rate: overrideRate,
-        isOverridden: true,
-        overrideName: activeOverride.name,
-        baseRate: acOrNonAc === 'AC' ? roomType.ac_rate : roomType.non_ac_rate
-      };
-    }
-
-    const baseRate = acOrNonAc === 'AC' ? roomType.ac_rate : roomType.non_ac_rate;
-    return {
-      rate: baseRate,
-      isOverridden: false,
-      overrideName: null,
-      baseRate
-    };
-  };
-
-  // Helper: Calculate GST for a tariff
-  const calculateGST = (ratePerNight, nights = 1) => {
-    const totalRoomCharge = ratePerNight * nights;
-    const gstConf = state.gstConfig || DEFAULT_GST_CONFIG;
-    const gstRate = ratePerNight > gstConf.slabThreshold
-      ? gstConf.luxuryRate
-      : gstConf.standardRate;
-    const gstAmount = Math.round((totalRoomCharge * gstRate) / 100);
-    return {
-      gstRate,
-      cgstRate: gstRate / 2,
-      sgstRate: gstRate / 2,
-      cgstAmount: Math.round(gstAmount / 2),
-      sgstAmount: Math.round(gstAmount / 2),
-      gstAmount,
-      totalRoomCharge,
-      grandTotal: totalRoomCharge + gstAmount
-    };
-  };
-
-  // ACTIONS
-
-  // 1. Switch Property
+  // Multi-Property Switcher
   const switchProperty = (propertyId) => {
+    const prop = (state.properties || SEED_PROPERTIES).find(p => p.id === propertyId);
+    if (!prop) return;
+    const auditEntry = logAudit(
+      'PROPERTY_SWITCHED',
+      prop.name,
+      `Switched active counter desk to ${prop.name} (${propertyId})`
+    );
     setState(prev => ({
       ...prev,
-      activePropertyId: propertyId
+      activePropertyId: propertyId,
+      auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
   };
 
-  // 2. Onboard New Property
-  const onboardNewProperty = ({
-    name,
-    subtitle,
-    city,
-    state: propState,
-    address,
-    gstNumber,
-    phone,
-    whatsapp,
-    email,
-    wifiSSID,
-    roomTypesList,
-    roomsList,
-    staffList: newStaffList
-  }) => {
-    const newPropId = `prop-${Date.now().toString().slice(-6)}`;
-
+  const onboardNewProperty = (propertyData) => {
+    const propertyId = `prop-${propertyData.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
     const newProperty = {
-      id: newPropId,
-      name,
-      subtitle: subtitle || `${name} • ${city}, ${propState}`,
-      address,
-      gst_number: gstNumber || '32AABCT0000Z1Z1',
-      phone: phone || '+91 94950 00000',
-      whatsapp: whatsapp || phone || '+91 94950 00000',
-      email: email || 'frontdesk@hotel.com',
-      wifiSSID: wifiSSID || `${name.replace(/\s+/g, '')}_Guest`,
-      total_rooms: roomsList.length,
-      city,
-      state: propState
+      id: propertyId,
+      name: propertyData.name,
+      subtitle: propertyData.subtitle || 'Tourist Home & Luxury Rooms',
+      address: propertyData.address,
+      gst_number: propertyData.gst_number || '32AABCT9988Q1Z4',
+      phone: propertyData.phone,
+      whatsapp: propertyData.whatsapp || propertyData.phone,
+      email: propertyData.email || 'reception@tajresidency.com',
+      wifi_ssid: propertyData.wifi_ssid || `${propertyData.name.replace(/\s+/g, '')}_Guest_5G`,
+      total_rooms: Number(propertyData.total_rooms) || 11,
+      city: propertyData.city || 'Kozhikode',
+      state: 'Kerala'
     };
 
-    const newRoomTypes = { ...state.roomTypes };
-    roomTypesList.forEach((rt, idx) => {
-      const rtId = `rt-${newPropId}-${idx + 1}`;
-      newRoomTypes[rtId] = {
-        id: rtId,
-        property_id: newPropId,
-        name: rt.name,
-        ac_rate: Number(rt.ac_rate) || 2000,
-        non_ac_rate: Number(rt.non_ac_rate) || 1500,
-        description: rt.description || 'Modern furnished guest room'
-      };
-    });
-
-    const newRooms = roomsList.map((r, i) => {
-      const matchedRtId = Object.keys(newRoomTypes).find(k => newRoomTypes[k].property_id === newPropId) || 'deluxe';
-      return {
-        id: `room-${newPropId}-${r.room_number}`,
-        property_id: newPropId,
-        room_number: r.room_number,
-        room_type_id: r.room_type_id || matchedRtId,
-        floor: Number(r.floor) || 1,
+    const newRooms = [];
+    const totalRooms = Number(propertyData.total_rooms) || 11;
+    for (let i = 1; i <= totalRooms; i++) {
+      const roomNum = (200 + i).toString();
+      const floor = i <= 6 ? 2 : 3;
+      newRooms.push({
+        id: `room-${roomNum}-${propertyId}`,
+        property_id: propertyId,
+        room_number: roomNum,
+        room_type_id: i % 2 === 0 ? 'classic' : 'deluxe',
+        floor,
         status: 'vacant',
         current_booking_id: null,
         wifi_voucher_code: null
-      };
-    });
-
-    const auditEntry = {
-      id: 'aud-' + Date.now(),
-      property_id: newPropId,
-      timestamp: new Date().toISOString().replace('T', ' ').slice(0, 19),
-      staff_role: 'Owner',
-      staff_name: currentStaff?.name || 'Owner',
-      action: 'PROPERTY_ONBOARDED',
-      target: name,
-      details: `Self-onboarded ${name} with ${newRooms.length} rooms, ${roomTypesList.length} room types, and ${newStaffList?.length || 0} staff invites.`
-    };
-
-    setState(prev => ({
-      ...prev,
-      properties: [...(prev.properties || []), newProperty],
-      roomTypes: newRoomTypes,
-      rooms: [...(prev.rooms || []), ...newRooms],
-      activePropertyId: newPropId,
-      auditLogs: [auditEntry, ...(prev.auditLogs || [])]
-    }));
-
-    return newPropId;
-  };
-
-  // 3. Add Expense
-  const addExpense = ({ category, categoryLabel, amount, date, vendor, notes }) => {
-    const expenseId = 'exp-' + Date.now();
-    const newExpense = {
-      id: expenseId,
-      property_id: state.activePropertyId,
-      category: category || 'other',
-      category_label: categoryLabel || 'Operational Expense',
-      amount: Number(amount) || 0,
-      date: date || new Date().toISOString().slice(0, 10),
-      vendor: vendor || 'Local Vendor',
-      notes: notes || 'Front desk logged expense',
-      logged_by: currentStaff?.name || 'Owner'
-    };
+      });
+    }
 
     const auditEntry = logAudit(
-      'EXPENSE_LOGGED',
-      `${categoryLabel} (₹${amount})`,
-      `Logged expense of ₹${amount} under ${category} to ${vendor}. Notes: ${notes}`
+      'PROPERTY_ONBOARDED',
+      newProperty.name,
+      `Successfully registered new hotel property with ${totalRooms} rooms under Kerala GST.`
     );
 
     setState(prev => ({
       ...prev,
-      expenses: [newExpense, ...(prev.expenses || [])],
+      properties: [...(prev.properties || SEED_PROPERTIES), newProperty],
+      rooms: [...(prev.rooms || SEED_ROOMS), ...newRooms],
+      activePropertyId: propertyId,
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
 
-    return expenseId;
+    return newProperty;
   };
 
-  // 4. Seasonal Overrides
+  // 2. Guest Management & CRM
+  const findGuestByPhone = (phone) => {
+    if (!phone) return null;
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    return (state.guests || []).find(g => {
+      const gClean = (g.phone || '').replace(/[^0-9]/g, '');
+      return gClean.endsWith(cleanPhone.slice(-10)) || cleanPhone.endsWith(gClean.slice(-10));
+    }) || null;
+  };
+
+  const updateGuestIdProof = (guestId, { idProofType, idProofNumber, idPhotoUrl, idPhotoBackUrl }) => {
+    let updatedGuest = null;
+    setState(prev => {
+      const updated = (prev.guests || []).map(g => {
+        if (g.id === guestId) {
+          updatedGuest = {
+            ...g,
+            id_proof_type: idProofType || g.id_proof_type,
+            id_proof_number: idProofNumber || g.id_proof_number,
+            id_proof_photo_url: idPhotoUrl || g.id_proof_photo_url,
+            id_proof_back_photo_url: idPhotoBackUrl || g.id_proof_back_photo_url,
+            id_verified_at: new Date().toISOString().replace('T', ' ').slice(0, 16),
+            id_verified_by_staff: currentStaff?.name || 'Receptionist'
+          };
+          return updatedGuest;
+        }
+        return g;
+      });
+      return { ...prev, guests: updated };
+    });
+
+    if (updatedGuest) {
+      saveGuestToSupabase(updatedGuest).then(() => {
+        setOfflineQueueCount(getOfflineQueue().length);
+      });
+    }
+  };
+
+  // 3. Dynamic Rate Calculation
+  const getRateForRoom = (roomTypeId, acOrNonAc = 'AC', targetDate = new Date()) => {
+    const dateStr = typeof targetDate === 'string'
+      ? targetDate.slice(0, 10)
+      : new Date(targetDate).toISOString().slice(0, 10);
+
+    const activeOverride = (state.seasonalOverrides || []).find(o =>
+      o.is_active &&
+      dateStr >= o.start_date &&
+      dateStr <= o.end_date &&
+      (o.room_type_id === roomTypeId || o.room_type_id === 'all')
+    );
+
+    if (activeOverride) {
+      return {
+        rate: acOrNonAc === 'AC' ? activeOverride.override_ac_rate : activeOverride.override_non_ac_rate,
+        isOverridden: true,
+        overrideName: activeOverride.name
+      };
+    }
+
+    const typeDef = (state.roomTypes && state.roomTypes[roomTypeId]) || ROOM_TYPES[roomTypeId] || ROOM_TYPES.deluxe;
+    return {
+      rate: acOrNonAc === 'AC' ? typeDef.ac_rate : typeDef.non_ac_rate,
+      isOverridden: false,
+      overrideName: null
+    };
+  };
+
+  // 4. GST Engine
+  const calculateGST = (ratePerDay, nights = 1) => {
+    const config = state.gstConfig || DEFAULT_GST_CONFIG;
+    const threshold = config.thresholdRate || 2500;
+    const isExempt = ratePerDay < threshold;
+
+    const gstRate = isExempt ? 0 : (config.standardRate || 12);
+    const taxableRoomCharge = ratePerDay * nights;
+    const gstAmount = isExempt ? 0 : Math.round((taxableRoomCharge * gstRate) / 100);
+    const cgstAmount = Math.round(gstAmount / 2);
+    const sgstAmount = gstAmount - cgstAmount;
+    const grandTotal = taxableRoomCharge + gstAmount;
+
+    return {
+      ratePerDay,
+      nights,
+      taxableRoomCharge,
+      isExempt,
+      gstRate,
+      cgstRate: gstRate / 2,
+      sgstRate: gstRate / 2,
+      cgstAmount,
+      sgstAmount,
+      gstAmount,
+      grandTotal
+    };
+  };
+
+  const updateGSTConfig = (newConfig) => {
+    setState(prev => ({
+      ...prev,
+      gstConfig: { ...prev.gstConfig, ...newConfig }
+    }));
+  };
+
+  // 5. Seasonal Overrides
   const addSeasonalOverride = ({ name, startDate, endDate, roomTypeId, overrideAcRate, overrideNonAcRate, reason }) => {
     const overrideId = 'ovr-' + Date.now();
     const newOverride = {
@@ -453,8 +538,9 @@ export function usePMSStore() {
       room_type_id: roomTypeId,
       override_ac_rate: Number(overrideAcRate),
       override_non_ac_rate: Number(overrideNonAcRate),
-      reason: reason || 'Seasonal festival adjustment',
-      is_active: true
+      reason,
+      is_active: true,
+      created_at: new Date().toISOString().replace('T', ' ').slice(0, 16)
     };
 
     const auditEntry = logAudit(
@@ -462,6 +548,10 @@ export function usePMSStore() {
       name,
       `Set override rates (₹${overrideAcRate} AC / ₹${overrideNonAcRate} Non-AC) from ${startDate} to ${endDate} for ${roomTypeId}`
     );
+
+    saveSeasonalOverrideToSupabase(newOverride).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
 
     setState(prev => ({
       ...prev,
@@ -480,6 +570,10 @@ export function usePMSStore() {
       `Deleted seasonal override ${overrideId}`
     );
 
+    deleteSeasonalOverrideFromSupabase(overrideId).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
+
     setState(prev => ({
       ...prev,
       seasonalOverrides: (prev.seasonalOverrides || []).filter(o => o.id !== overrideId),
@@ -487,7 +581,7 @@ export function usePMSStore() {
     }));
   };
 
-  // 5. Booking Creation
+  // 6. Booking Creation (Writes to Supabase first)
   const createBooking = ({
     roomId,
     guestName,
@@ -515,11 +609,12 @@ export function usePMSStore() {
     let existingGuest = findGuestByPhone(guestPhone);
     let guestId = existingGuest ? existingGuest.id : `gst-${Date.now()}`;
 
+    let guestToSave = null;
     let updatedGuests = [...(state.guests || SEED_GUESTS)];
     if (existingGuest) {
       updatedGuests = updatedGuests.map(g => {
         if (g.id === existingGuest.id) {
-          return {
+          guestToSave = {
             ...g,
             name: guestName || g.name,
             address: guestAddress || g.address,
@@ -532,11 +627,12 @@ export function usePMSStore() {
             notes: guestNotes || g.notes,
             total_stays: (g.total_stays || 1) + 1
           };
+          return guestToSave;
         }
         return g;
       });
     } else {
-      updatedGuests.push({
+      guestToSave = {
         id: guestId,
         property_id: state.activePropertyId,
         name: guestName,
@@ -551,7 +647,8 @@ export function usePMSStore() {
         notes: guestNotes || 'Walk-in Guest',
         total_stays: 1,
         lifetime_spend: 0
-      });
+      };
+      updatedGuests.push(guestToSave);
     }
 
     const nights = Math.max(1, Math.ceil(
@@ -584,12 +681,27 @@ export function usePMSStore() {
     };
 
     const nextRoomStatus = isPreBooking ? 'reserved' : 'occupied';
+    const updatedRoom = {
+      ...room,
+      status: nextRoomStatus,
+      current_booking_id: bookingId,
+      wifi_voucher_code: wifiCode
+    };
 
     const auditEntry = logAudit(
       'BOOKING_CREATED',
       `Room ${room.room_number}`,
       `Guest ${guestName} (${acOrNonAc} @ ₹${rateApplied}/night). Adv ₹${advancePaid} via ${paymentMode}. Staff: ${authorStaff}. WiFi: ${wifiCode}`
     );
+
+    // Synchronous write to Supabase
+    Promise.all([
+      saveGuestToSupabase(guestToSave),
+      saveRoomToSupabase(updatedRoom),
+      saveBookingToSupabase(newBooking)
+    ]).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
 
     setState(prev => ({
       ...prev,
@@ -598,24 +710,14 @@ export function usePMSStore() {
         ...(prev.bookings || {}),
         [bookingId]: newBooking
       },
-      rooms: (prev.rooms || []).map(r => {
-        if (r.id === roomId) {
-          return {
-            ...r,
-            status: nextRoomStatus,
-            current_booking_id: bookingId,
-            wifi_voucher_code: wifiCode
-          };
-        }
-        return r;
-      }),
+      rooms: (prev.rooms || []).map(r => (r.id === roomId ? updatedRoom : r)),
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
 
     return bookingId;
   };
 
-  // 5b. Extend In-House Booking Stay (+1 Day / +2 Days)
+  // 7. Extend In-House Booking Stay
   const extendBookingStay = (roomId, additionalDays = 1) => {
     const room = (state.rooms || []).find(r => r.id === roomId);
     if (!room || !room.current_booking_id) return null;
@@ -631,21 +733,27 @@ export function usePMSStore() {
     const newCheckOutStr = newCheckOutDateObj.toISOString().replace('T', ' ').slice(0, 16);
 
     const guest = (state.guests || []).find(g => g.id === booking.guest_id);
+    const updatedBooking = {
+      ...booking,
+      nights: newNights,
+      check_out_date: newCheckOutStr
+    };
+
     const auditEntry = logAudit(
       'STAY_EXTENDED',
       `Room ${room.room_number}`,
       `Stay extended by +${additionalDays} Day(s) for guest ${guest?.name || 'Guest'}. Total stay: ${newNights} Nights. New checkout: ${newCheckOutStr}.`
     );
 
+    saveBookingToSupabase(updatedBooking).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
+
     setState(prev => ({
       ...prev,
       bookings: {
         ...(prev.bookings || {}),
-        [booking.id]: {
-          ...booking,
-          nights: newNights,
-          check_out_date: newCheckOutStr
-        }
+        [booking.id]: updatedBooking
       },
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
@@ -656,7 +764,7 @@ export function usePMSStore() {
     };
   };
 
-  // 5c. Confirm Arrival Check-In for an Advance Reservation
+  // 8. Confirm Arrival Check-In for an Advance Reservation
   const checkInAdvanceReservation = (bookingId, {
     additionalAdvance = 0,
     paymentMode = 'Cash',
@@ -675,11 +783,12 @@ export function usePMSStore() {
     const authorStaff = currentStaff?.name || 'Receptionist';
     const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
+    let updatedGuestToSave = null;
     let updatedGuests = [...(state.guests || [])];
     if (guest && (guestIdPhotoUrl || guestIdNumber || guestAddress)) {
       updatedGuests = updatedGuests.map(g => {
         if (g.id === guest.id) {
-          return {
+          updatedGuestToSave = {
             ...g,
             address: guestAddress || g.address,
             id_proof_type: guestIdType || g.id_proof_type,
@@ -689,6 +798,7 @@ export function usePMSStore() {
             id_verified_at: guestIdPhotoUrl ? nowTimestamp : g.id_verified_at,
             id_verified_by_staff: guestIdPhotoUrl ? authorStaff : g.id_verified_by_staff
           };
+          return updatedGuestToSave;
         }
         return g;
       });
@@ -703,8 +813,13 @@ export function usePMSStore() {
       ac_or_non_ac: acOrNonAc || booking.ac_or_non_ac,
       advance_paid: totalAdvance,
       payment_mode: paymentMode || booking.payment_mode,
-      checked_in_at: nowTimestamp,
-      checked_in_by_staff: authorStaff
+      created_by_staff_name: authorStaff
+    };
+
+    const updatedRoom = {
+      ...room,
+      status: 'occupied',
+      current_booking_id: bookingId
     };
 
     const auditEntry = logAudit(
@@ -713,6 +828,15 @@ export function usePMSStore() {
       `Advance reservation for ${guest?.name || 'Guest'} checked in to Room ${room?.room_number}. Advance: ₹${totalAdvance}. Staff: ${authorStaff}.`
     );
 
+    // Save synchronously to Supabase
+    Promise.all([
+      saveBookingToSupabase(updatedBooking),
+      saveRoomToSupabase(updatedRoom),
+      updatedGuestToSave ? saveGuestToSupabase(updatedGuestToSave) : Promise.resolve()
+    ]).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
+
     setState(prev => ({
       ...prev,
       guests: updatedGuests,
@@ -720,23 +844,14 @@ export function usePMSStore() {
         ...(prev.bookings || {}),
         [bookingId]: updatedBooking
       },
-      rooms: (prev.rooms || []).map(r => {
-        if (r.id === booking.room_id) {
-          return {
-            ...r,
-            status: 'occupied',
-            current_booking_id: bookingId
-          };
-        }
-        return r;
-      }),
+      rooms: (prev.rooms || []).map(r => (r.id === booking.room_id ? updatedRoom : r)),
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
 
     return updatedBooking;
   };
 
-  // 6. Checkout & Billing with Optional Concession / Discount
+  // 9. Checkout & Billing with Optional Concession / Discount
   const checkoutAndGenerateInvoice = (roomId, { paymentMode, notes, billed_by_staff_name, discountAmount = 0, discountType = 'flat', discountReason = '' }) => {
     const room = (state.rooms || []).find(r => r.id === roomId);
     if (!room || !room.current_booking_id) return;
@@ -748,7 +863,6 @@ export function usePMSStore() {
     const nights = booking.nights || 1;
     const grossRoomCharge = booking.rate_applied * nights;
 
-    // Calculate final discount
     const finalDiscount = Number(discountAmount) || 0;
     const taxableRoomCharge = Math.max(0, grossRoomCharge - finalDiscount);
     const gstCalc = calculateGST(taxableRoomCharge > 0 ? (taxableRoomCharge / nights) : 0, nights);
@@ -786,44 +900,51 @@ export function usePMSStore() {
       paid_at: new Date().toISOString().replace('T', ' ').slice(0, 16)
     };
 
+    const updatedBooking = {
+      ...booking,
+      status: 'checked_out'
+    };
+
+    const updatedRoom = {
+      ...room,
+      status: 'dirty',
+      last_guest_name: guest?.name,
+      checked_out_at: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      current_booking_id: null,
+      wifi_voucher_code: null,
+      housekeeper_assigned: 'Meera Thomas (HK Lead)'
+    };
+
     const auditEntry = logAudit(
       'CHECKOUT_BILLED',
       `Room ${room.room_number}`,
-      `Billed ${guest?.name}. Gross: ₹${grossRoomCharge}${finalDiscount > 0 ? `, Discount: -₹${finalDiscount} (${discountReason || 'Courtesy'})` : ''}, Total: ₹${grandTotal}, Settled: ₹${balanceSettled} via ${paymentMode}. Staff: ${billerStaff}. Room auto-flagged DIRTY.`
+      `Billed ${guest?.name}. Gross: ₹${grossRoomCharge}${finalDiscount > 0 ? `, Discount: -₹${finalDiscount}` : ''}, Total: ₹${grandTotal}, Settled: ₹${balanceSettled} via ${paymentMode}. Staff: ${billerStaff}. Room auto-flagged DIRTY.`
     );
+
+    // Save synchronously to Supabase
+    Promise.all([
+      saveInvoiceToSupabase(newInvoice),
+      saveBookingToSupabase(updatedBooking),
+      saveRoomToSupabase(updatedRoom)
+    ]).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
 
     setState(prev => ({
       ...prev,
       invoices: [newInvoice, ...(prev.invoices || [])],
       bookings: {
         ...(prev.bookings || {}),
-        [booking.id]: {
-          ...booking,
-          status: 'checked_out',
-          invoice_id: invoiceId
-        }
+        [booking.id]: updatedBooking
       },
-      rooms: (prev.rooms || []).map(r => {
-        if (r.id === roomId) {
-          return {
-            ...r,
-            status: 'dirty',
-            last_guest_name: guest?.name,
-            checked_out_at: new Date().toISOString().replace('T', ' ').slice(0, 16),
-            current_booking_id: null,
-            wifi_voucher_code: null,
-            housekeeper_assigned: 'Meera Thomas (HK Lead)'
-          };
-        }
-        return r;
-      }),
+      rooms: (prev.rooms || []).map(r => (r.id === roomId ? updatedRoom : r)),
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
 
     return newInvoice;
   };
 
-  // 7. Housekeeping Status Advancement (Lady Staff Meera Thomas)
+  // 10. Housekeeping Status Advancement
   const advanceHousekeepingStatus = (roomId, staffName = 'Meera Thomas') => {
     const room = (state.rooms || []).find(r => r.id === roomId);
     if (!room) return;
@@ -845,6 +966,13 @@ export function usePMSStore() {
       actionDetail = `Marked active vacant on reception board.`;
     }
 
+    const updatedRoom = {
+      ...room,
+      status: nextStatus,
+      housekeeper_assigned: staffName,
+      inspected_by: nextStatus === 'ready' || nextStatus === 'vacant' ? staffName : room.inspected_by
+    };
+
     const auditEntry = logAudit(
       'HOUSEKEEPING_ADVANCE',
       `Room ${room.room_number}`,
@@ -853,24 +981,18 @@ export function usePMSStore() {
       staffName
     );
 
+    saveRoomToSupabase(updatedRoom).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
+
     setState(prev => ({
       ...prev,
-      rooms: (prev.rooms || []).map(r => {
-        if (r.id === roomId) {
-          return {
-            ...r,
-            status: nextStatus,
-            housekeeper_assigned: staffName,
-            inspected_by: nextStatus === 'ready' || nextStatus === 'vacant' ? staffName : r.inspected_by
-          };
-        }
-        return r;
-      }),
+      rooms: (prev.rooms || []).map(r => (r.id === roomId ? updatedRoom : r)),
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
   };
 
-  // 8. Shift Handover (Anoop Nair -> Suresh Babu)
+  // 11. Shift Handover
   const closeShiftHandover = ({ physicalCash, handoverNotes, nextShiftStaff = 'Suresh Babu' }) => {
     const cashDrawerExpected = stats.cashRevenue || state.currentShift?.openingCash || 2240;
     const discrepancy = Number(physicalCash) - Number(cashDrawerExpected);
@@ -890,16 +1012,20 @@ export function usePMSStore() {
     };
 
     const auditEntry = logAudit(
-      'SHIFT_HANDOVER',
-      'Shift Register',
-      `Shift closed by ${currentStaff?.name}. Cash counted: ₹${physicalCash} (Discrepancy: ₹${discrepancy}). Handed to ${nextShiftStaff}. Notes: "${handoverNotes}"`
+      'SHIFT_CLOSED',
+      state.currentShift?.name || 'Day Shift',
+      `Handover to ${nextShiftStaff}. Cash: ₹${physicalCash} (Discrepancy: ₹${discrepancy}). Notes: ${handoverNotes || 'None'}`
     );
+
+    saveShiftLogToSupabase(shiftRecord).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
+    });
 
     setState(prev => ({
       ...prev,
       shiftLogs: [shiftRecord, ...(prev.shiftLogs || [])],
       currentShift: {
-        name: prev.currentShift?.name?.includes('Day') ? 'Evening Shift (14:00 - 22:00)' : 'Day Shift (06:00 - 14:00)',
+        name: nextShiftStaff.includes('Suresh') ? 'Night Shift (14:00 - 22:00)' : 'Day Shift (06:00 - 14:00)',
         staffName: nextShiftStaff,
         startedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
         openingCash: Number(physicalCash)
@@ -908,144 +1034,76 @@ export function usePMSStore() {
     }));
   };
 
-  // 9. QR Self-Checkin
-  const addGuestSelfCheckin = (selfCheckinData) => {
-    const newEntry = {
-      id: 'self-qr-' + Date.now(),
+  // 12. Expenses
+  const addExpense = ({ category, categoryLabel, amount, vendor, notes }) => {
+    const newExpense = {
+      id: 'exp-' + Date.now(),
       property_id: state.activePropertyId,
-      booking_id: selfCheckinData.booking_id || null,
-      room_number: selfCheckinData.room_number || '204',
-      guest_name: selfCheckinData.guest_name,
-      phone: selfCheckinData.phone,
-      id_proof_type: selfCheckinData.id_proof_type || 'Aadhaar Card',
-      id_proof_number: selfCheckinData.id_proof_number || 'VERIFIED-ONLINE',
-      id_proof_photo_url: selfCheckinData.id_proof_photo_url || '',
-      address: selfCheckinData.address || 'Bangalore',
-      eta: selfCheckinData.eta || 'Tonight 22:00',
-      digital_signature_captured: true,
-      submitted_at: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      status: 'pending_reception_confirmation'
+      category,
+      category_label: categoryLabel,
+      amount: Number(amount),
+      date: new Date().toISOString().slice(0, 10),
+      vendor,
+      notes,
+      logged_by: currentStaff?.name || 'Muhammed Shahir'
     };
 
     const auditEntry = logAudit(
-      'GUEST_SELF_CHECKIN',
-      `Self Registration`,
-      `Guest ${selfCheckinData.guest_name} submitted pre-arrival ID on mobile QR portal.`
+      'EXPENSE_LOGGED',
+      categoryLabel,
+      `₹${amount} paid to ${vendor}. Notes: ${notes || 'None'}`
     );
 
-    setState(prev => ({
-      ...prev,
-      selfCheckins: [newEntry, ...(prev.selfCheckins || [])],
-      auditLogs: [auditEntry, ...(prev.auditLogs || [])]
-    }));
-  };
-
-  const confirmSelfCheckin = (selfCheckinId, targetRoomId) => {
-    const selfItem = (state.selfCheckins || []).find(c => c.id === selfCheckinId);
-    if (!selfItem) return;
-
-    createBooking({
-      roomId: targetRoomId,
-      guestName: selfItem.guest_name,
-      guestPhone: selfItem.phone,
-      guestAddress: selfItem.address,
-      guestIdType: selfItem.id_proof_type,
-      guestIdNumber: selfItem.id_proof_number,
-      guestIdPhotoUrl: selfItem.id_proof_photo_url,
-      guestNotes: `Self-registered via Mobile QR. ETA: ${selfItem.eta}`,
-      checkInDate: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      checkOutDate: '2026-08-10 11:00',
-      acOrNonAc: 'AC',
-      advancePaid: 1500,
-      paymentMode: 'UPI',
-      isPreBooking: false
+    saveExpenseToSupabase(newExpense).then(() => {
+      setOfflineQueueCount(getOfflineQueue().length);
     });
 
     setState(prev => ({
       ...prev,
-      selfCheckins: (prev.selfCheckins || []).filter(c => c.id !== selfCheckinId)
-    }));
-  };
-
-  // 9b. Update Guest ID Proof (Front/Back/Type/Number) directly from Directory or Inspection
-  const updateGuestIdProof = (guestId, {
-    idType,
-    idNumber,
-    idPhotoUrl,
-    idPhotoBackUrl,
-    staffName
-  }) => {
-    const authorStaff = staffName || currentStaff?.name || 'Receptionist';
-    const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
-
-    let targetGuestName = 'Guest';
-    const updatedGuests = (state.guests || SEED_GUESTS).map(g => {
-      if (g.id === guestId) {
-        targetGuestName = g.name;
-        return {
-          ...g,
-          id_proof_type: idType !== undefined ? idType : g.id_proof_type,
-          id_proof_number: idNumber !== undefined ? idNumber : g.id_proof_number,
-          id_proof_photo_url: idPhotoUrl !== undefined ? idPhotoUrl : g.id_proof_photo_url,
-          id_proof_back_photo_url: idPhotoBackUrl !== undefined ? idPhotoBackUrl : g.id_proof_back_photo_url,
-          id_verified_at: nowTimestamp,
-          id_verified_by_staff: authorStaff
-        };
-      }
-      return g;
-    });
-
-    const auditEntry = logAudit(
-      'GUEST_ID_UPDATED',
-      `Guest ${targetGuestName}`,
-      `ID Proof updated (${idType || 'Govt ID'}). Front photo: ${idPhotoUrl ? 'Attached' : 'Unchanged'}, Back: ${idPhotoBackUrl ? 'Attached' : 'None'}. Verified by ${authorStaff}.`
-    );
-
-    setState(prev => ({
-      ...prev,
-      guests: updatedGuests,
+      expenses: [newExpense, ...(prev.expenses || [])],
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
   };
 
-  // 10. GST Config & Property Tax Identity
-  const updateGSTConfig = (newConfig) => {
-    const cleanGSTIN = newConfig.gstNumber !== undefined ? newConfig.gstNumber.trim().toUpperCase() : null;
-    const auditDetails = `Owner updated GST settings: GSTIN=${cleanGSTIN || 'Unchanged'}, Standard=${newConfig.standardRate || 12}%, Luxury=${newConfig.luxuryRate || 18}%, Threshold=₹${newConfig.slabThreshold || 7500}`;
+  const addGuestSelfCheckin = (checkinData) => {
+    const newRecord = {
+      id: 'self-qr-' + Date.now(),
+      property_id: state.activePropertyId,
+      ...checkinData,
+      submitted_at: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      status: 'pending_reception_confirmation'
+    };
+    setState(prev => ({
+      ...prev,
+      selfCheckins: [newRecord, ...(prev.selfCheckins || [])]
+    }));
+    return newRecord;
+  };
 
-    const auditEntry = logAudit(
-      'GST_CONFIG_UPDATE',
-      'Tax Settings',
-      auditDetails
-    );
-
-    setState(prev => {
-      const updatedProperties = (prev.properties || []).map(p => {
-        if (p.id === prev.activePropertyId) {
-          return {
-            ...p,
-            gst_number: cleanGSTIN !== null ? cleanGSTIN : p.gst_number,
-            legal_entity: newConfig.legalEntity || p.legal_entity || p.name
-          };
+  const confirmSelfCheckin = (checkinId) => {
+    setState(prev => ({
+      ...prev,
+      selfCheckins: (prev.selfCheckins || []).map(sc => {
+        if (sc.id === checkinId) {
+          return { ...sc, status: 'confirmed_checked_in' };
         }
-        return p;
-      });
-
-      return {
-        ...prev,
-        properties: updatedProperties,
-        gstConfig: {
-          ...(prev.gstConfig || DEFAULT_GST_CONFIG),
-          ...newConfig,
-          gstNumber: cleanGSTIN !== null ? cleanGSTIN : (prev.gstConfig?.gstNumber || prev.property?.gst_number || '')
-        },
-        auditLogs: [auditEntry, ...(prev.auditLogs || [])]
-      };
-    });
+        return sc;
+      })
+    }));
   };
 
-  // Stats Computations
-  const totalRooms = scopedRooms.length || 1;
+  // Scoped views for active property
+  const activeProperty = (state.properties || SEED_PROPERTIES).find(p => p.id === state.activePropertyId) || SEED_PROPERTIES[0];
+  const scopedRooms = (state.rooms || SEED_ROOMS).filter(r => r.property_id === state.activePropertyId);
+  const scopedInvoices = (state.invoices || []).filter(i => i.property_id === state.activePropertyId);
+  const scopedExpenses = (state.expenses || []).filter(e => e.property_id === state.activePropertyId);
+  const scopedOverrides = (state.seasonalOverrides || []).filter(o => o.property_id === state.activePropertyId);
+  const scopedShiftLogs = (state.shiftLogs || []).filter(s => s.property_id === state.activePropertyId);
+  const scopedAuditLogs = (state.auditLogs || []).filter(a => a.property_id === state.activePropertyId);
+  const scopedSelfCheckins = (state.selfCheckins || []).filter(s => s.property_id === state.activePropertyId);
+
+  // Statistics Calculations
+  const totalRooms = scopedRooms.length || 11;
   const vacantRooms = scopedRooms.filter(r => r.status === 'vacant' || r.status === 'ready').length;
   const occupiedRooms = scopedRooms.filter(r => r.status === 'occupied').length;
   const reservedRooms = scopedRooms.filter(r => r.status === 'reserved').length;
@@ -1135,18 +1193,35 @@ export function usePMSStore() {
     selfCheckins: scopedSelfCheckins,
     roleConfig: STAFF_ROLES[currentRole] || STAFF_ROLES.receptionist,
     stats,
-    syncStatus,
+    syncStatus: {
+      status: realtimeStatus.status === 'connected' ? 'connected' : (realtimeStatus.status === 'offline' ? 'offline' : 'connecting'),
+      channel: 'postgres_changes (supabase)',
+      lastSyncedAt: realtimeStatus.lastEventAt,
+      connectedDevicesCount: realtimeStatus.connectedDevicesCount,
+      offlineQueueCount
+    },
+    offlineQueueCount,
+    isSupabaseConfigured,
     actions: {
-      forceSyncNow: () => syncService.broadcast(state, 'MANUAL_SYNC'),
-      pushToCloud: () => syncService.broadcast(state, 'MANUAL_PUSH_MASTER'),
-      pullLatestFromCloud: async () => {
-        const latest = await syncService.pullLatestState();
-        if (latest) {
+      flushOfflineQueueNow: async () => {
+        const res = await flushOfflineQueue();
+        setOfflineQueueCount(res.remainingCount || 0);
+        return res;
+      },
+      testDatabaseConnection: testSupabaseConnection,
+      refreshFromDatabase: async () => {
+        const dataset = await fetchInitialDataset(state.activePropertyId);
+        if (dataset.isLoaded && dataset.hasData) {
           setState(prev => ({
             ...prev,
-            ...latest,
-            currentStaffId: prev.currentStaffId,
-            viewMode: prev.viewMode
+            rooms: dataset.rooms || prev.rooms,
+            bookings: dataset.bookings || prev.bookings,
+            guests: dataset.guests || prev.guests,
+            invoices: dataset.invoices || prev.invoices,
+            expenses: dataset.expenses || prev.expenses,
+            shiftLogs: dataset.shiftLogs || prev.shiftLogs,
+            auditLogs: dataset.auditLogs || prev.auditLogs,
+            seasonalOverrides: dataset.seasonalOverrides || prev.seasonalOverrides
           }));
           return true;
         }

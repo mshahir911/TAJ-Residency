@@ -136,16 +136,26 @@ export default function TopHeader({
           </div>
         </button>
 
-        {/* Sync Status Badge / Dot with Real-Time Cross-Device indicator */}
+        {/* Sync Status Badge / Dot with Real-Time Supabase Realtime indicator */}
         <button
           type="button"
           onClick={onOpenDatabaseModal}
           className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-ink border border-brass-soft/30 hover:border-brass text-slate-300 hover:text-white shrink-0 transition-colors"
-          title={syncStatus?.status === 'connected' ? `Real-Time Cloud Synced (${syncStatus?.connectedDevicesCount || 1} devices linked)` : 'Click to configure real-time cloud sync across desk & phone'}
+          title={
+            syncStatus?.offlineQueueCount > 0
+              ? `${syncStatus.offlineQueueCount} mutations queued offline in localStorage. Click to view.`
+              : (syncStatus?.status === 'connected' ? 'Supabase Realtime Connected (PostgreSQL Single Source of Truth)' : 'Connecting to Supabase Realtime...')
+          }
         >
-          <span className={`w-2 h-2 rounded-full ${syncStatus?.status === 'connected' ? 'bg-signal-green shadow-sm shadow-signal-green animate-pulse' : (isOnline ? 'bg-signal-green' : 'bg-signal-amber')}`} />
+          <span className={`w-2 h-2 rounded-full ${
+            syncStatus?.offlineQueueCount > 0
+              ? 'bg-signal-amber animate-pulse'
+              : (syncStatus?.status === 'connected' ? 'bg-signal-green shadow-sm shadow-signal-green animate-pulse' : 'bg-amber-400')
+          }`} />
           <span className="text-[10px] font-bold uppercase tracking-wider hidden sm:inline">
-            {syncStatus?.status === 'connected' ? 'CLOUD SYNC' : (isOnline ? 'ONLINE' : 'LOCAL')}
+            {syncStatus?.offlineQueueCount > 0
+              ? `QUEUED (${syncStatus.offlineQueueCount})`
+              : (syncStatus?.status === 'connected' ? 'LIVE SYNC' : (isOnline ? 'CONNECTING' : 'OFFLINE'))}
           </span>
         </button>
 

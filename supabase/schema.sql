@@ -113,6 +113,9 @@ CREATE TABLE IF NOT EXISTS public.guests (
   id_proof_type TEXT DEFAULT 'Aadhaar Card',
   id_proof_number TEXT,
   id_proof_photo_url TEXT, -- CDN URL in Supabase Storage bucket 'guest-id-proofs'
+  id_proof_back_photo_url TEXT,
+  id_verified_at TIMESTAMPTZ,
+  id_verified_by_staff TEXT,
   address TEXT,
   notes TEXT,
   total_stays INTEGER DEFAULT 1,
@@ -153,6 +156,10 @@ CREATE TABLE IF NOT EXISTS public.invoices (
   nights INTEGER NOT NULL,
   rate_applied NUMERIC(10,2) NOT NULL,
   ac_or_non_ac ac_type NOT NULL,
+  gross_room_charge NUMERIC(10,2),
+  discount_amount NUMERIC(10,2) DEFAULT 0.00,
+  discount_type TEXT DEFAULT 'flat',
+  discount_reason TEXT,
   room_charge NUMERIC(10,2) NOT NULL,
   gst_rate NUMERIC(4,2) NOT NULL DEFAULT 12.00,
   gst_amount NUMERIC(10,2) NOT NULL,
@@ -342,3 +349,37 @@ VALUES
   ('staff-rec-02', 'taj-residency-calicut', 'Suresh Babu', 'receptionist', 'Receptionist (Night Shift)', 'suresh.reception@tajresidency.com', '+91 98470 12002', crypt('2002', gen_salt('bf')), 'Evening / Night Shift (14:00 - 22:00 / 22:00 - 06:00 IST)', 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'),
   ('staff-hk-01', 'taj-residency-calicut', 'Meera Thomas', 'housekeeping', 'Housekeeping (Lady Staff)', 'meera.hk@tajresidency.com', '+91 98470 13001', crypt('3001', gen_salt('bf')), 'Linen Turnover & Sanitization', 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150')
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- 6. SUPABASE REALTIME PUBLICATION & REPLICA IDENTITY
+-- ============================================================================
+-- Ensure all PMS tables emit full payloads on UPDATE/DELETE to Realtime subscribers
+
+ALTER TABLE public.rooms REPLICA IDENTITY FULL;
+ALTER TABLE public.bookings REPLICA IDENTITY FULL;
+ALTER TABLE public.guests REPLICA IDENTITY FULL;
+ALTER TABLE public.invoices REPLICA IDENTITY FULL;
+ALTER TABLE public.expenses REPLICA IDENTITY FULL;
+ALTER TABLE public.shift_logs REPLICA IDENTITY FULL;
+ALTER TABLE public.audit_logs REPLICA IDENTITY FULL;
+ALTER TABLE public.properties REPLICA IDENTITY FULL;
+ALTER TABLE public.seasonal_overrides REPLICA IDENTITY FULL;
+
+-- Add tables to the supabase_realtime publication for postgres_changes
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.rooms;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.guests;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.invoices;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.expenses;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.shift_logs;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.audit_logs;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.properties;
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.seasonal_overrides;
+  END IF;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+

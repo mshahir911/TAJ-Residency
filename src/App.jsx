@@ -565,9 +565,14 @@ export default function App() {
           onClose={() => setIsDatabaseModalOpen(false)}
           property={store.property}
           syncStatus={store.syncStatus}
-          onForceSync={store.actions.forceSyncNow}
-          onPushToCloud={store.actions.pushToCloud}
-          onPullFromCloud={store.actions.pullLatestFromCloud}
+          offlineQueueCount={store.offlineQueueCount}
+          onFlushQueue={store.actions.flushOfflineQueueNow}
+          onTestConnection={store.actions.testDatabaseConnection}
+          onRefreshFromDatabase={store.actions.refreshFromDatabase}
+          roomsCount={store.rooms.length}
+          bookingsCount={Object.keys(store.bookings || {}).length}
+          guestsCount={store.guests.length}
+          invoicesCount={store.invoices.length}
         />
       )}
 
