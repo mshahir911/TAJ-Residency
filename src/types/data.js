@@ -186,6 +186,22 @@ export const DEFAULT_GST_CONFIG = {
   jurisdiction: 'Kozhikode, Kerala (State 32)'
 };
 
+export const DEFAULT_FRESH_UP_TIERS = [
+  { id: 'tier-1', minPeople: 1, maxPeople: 2, ratePerPerson: 200, label: 'Solo / Couple (1-2 Pax)' },
+  { id: 'tier-2', minPeople: 3, maxPeople: 5, ratePerPerson: 160, label: 'Small Family / Group (3-5 Pax)' },
+  { id: 'tier-3', minPeople: 6, maxPeople: 12, ratePerPerson: 130, label: 'Mid Group / Minibus (6-12 Pax)' },
+  { id: 'tier-4', minPeople: 13, maxPeople: 60, ratePerPerson: 100, label: 'Large Tour Bus (13+ Pax)' }
+];
+
+export function getFreshUpRatePerPerson(groupSize, tiers = DEFAULT_FRESH_UP_TIERS) {
+  const size = Math.max(1, Number(groupSize) || 1);
+  const activeTiers = Array.isArray(tiers) && tiers.length > 0 ? tiers : DEFAULT_FRESH_UP_TIERS;
+  const matched = activeTiers.find(t => size >= t.minPeople && (t.maxPeople ? size <= t.maxPeople : true));
+  if (matched) return matched.ratePerPerson;
+  const sorted = [...activeTiers].sort((a, b) => b.minPeople - a.minPeople);
+  return sorted[0]?.ratePerPerson || 100;
+}
+
 export const ROOM_TYPES = {
   deluxe: {
     id: 'deluxe',

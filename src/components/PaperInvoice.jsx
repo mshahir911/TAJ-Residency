@@ -300,7 +300,12 @@ _Thank you for choosing Taj Residency!_`;
                 Stay Period
               </span>
               <div><span className="text-slate-500">Check-In:</span> {booking?.check_in_date || '2026-08-07 14:00'}</div>
-              <div><span className="text-slate-500">Total Duration:</span> {nights} Night(s) (12:00 PM Noon Basis)</div>
+              <div>
+                <span className="text-slate-500">Total Duration:</span>{' '}
+                {booking?.booking_type === 'day_use'
+                  ? `Fresh-Up (${booking?.duration_hours || 2} Hrs, ${booking?.group_size || 1} Pax)`
+                  : `${nights} Night(s) (12:00 PM Noon Basis)`}
+              </div>
               <div><span className="text-slate-500">Payment Mode:</span> {paymentMode}</div>
             </div>
           </div>
@@ -312,8 +317,8 @@ _Thank you for choosing Taj Residency!_`;
                 <th className="p-2">#</th>
                 <th className="p-2">SAC Code</th>
                 <th className="p-2">Description</th>
-                <th className="p-2 text-center">Days</th>
-                <th className="p-2 text-right">Tariff / Day</th>
+                <th className="p-2 text-center">{booking?.booking_type === 'day_use' ? 'Hours' : 'Days'}</th>
+                <th className="p-2 text-right">{booking?.booking_type === 'day_use' ? 'Tariff' : 'Tariff / Day'}</th>
                 <th className="p-2 text-right">Taxable Value</th>
                 <th className="p-2 text-right">GST</th>
                 <th className="p-2 text-right">Amount (INR)</th>
@@ -324,9 +329,11 @@ _Thank you for choosing Taj Residency!_`;
                 <td className="p-2 text-slate-500">1</td>
                 <td className="p-2 text-slate-600">{sacCode}</td>
                 <td className="p-2 font-sans font-medium text-black">
-                  Room Accommodation ({room.room_type_id === 'deluxe' ? 'Deluxe Room' : 'Classic Room'} - {booking?.ac_or_non_ac || 'AC'})
+                  {booking?.booking_type === 'day_use'
+                    ? `Fresh-Up Day Accommodation (${booking?.duration_hours || 2} Hours, ${booking?.group_size || 1} Pax @ Tiered Rate • ${booking?.ac_or_non_ac || 'AC'})`
+                    : `Room Accommodation (${room.room_type_id === 'deluxe' ? 'Deluxe Room' : 'Classic Room'} - ${booking?.ac_or_non_ac || 'AC'})`}
                 </td>
-                <td className="p-2 text-center">{nights}</td>
+                <td className="p-2 text-center">{booking?.booking_type === 'day_use' ? `${booking?.duration_hours || 2}h` : nights}</td>
                 <td className="p-2 text-right">{formatCurrency(rateApplied)}</td>
                 <td className="p-2 text-right">{formatCurrency(grossRoomCharge)}</td>
                 <td className="p-2 text-right">12%</td>

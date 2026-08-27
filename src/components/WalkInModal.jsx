@@ -27,10 +27,13 @@ import {
   UserPlus,
   CheckCircle2,
   Key,
-  BadgeCheck
+  BadgeCheck,
+  Zap,
+  Users,
+  Tag
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ROOM_TYPES, DEFAULT_GST_CONFIG } from '../types/data';
+import { ROOM_TYPES, DEFAULT_GST_CONFIG, DEFAULT_FRESH_UP_TIERS, getFreshUpRatePerPerson } from '../types/data';
 import { formatCurrency } from '../utils/formatters';
 import { formatDeadlineDisplay } from '../utils/billing';
 import IdPhotoCaptureWidget from './IdPhotoCaptureWidget';
@@ -45,6 +48,7 @@ export default function WalkInModal({
   preselectedRoom,
   preselectedGuest = null,
   preselectedReservation = null,
+  freshUpTiers = DEFAULT_FRESH_UP_TIERS,
   onSaveBooking,
   onCheckInReservation,
   onSubmit,
@@ -86,6 +90,15 @@ export default function WalkInModal({
   ) : null);
 
   // Booking details & Climate
+  const [bookingType, setBookingType] = useState('overnight'); // 'overnight' | 'day_use'
+  const [freshUpHours, setFreshUpHours] = useState(2);
+  const [isCustomHours, setIsCustomHours] = useState(false);
+  const [groupSize, setGroupSize] = useState(2);
+  const [isCustomGroup, setIsCustomGroup] = useState(false);
+  const [freshUpDiscountType, setFreshUpDiscountType] = useState('flat'); // 'flat' | 'percent'
+  const [freshUpDiscountValue, setFreshUpDiscountValue] = useState(0);
+  const [freshUpDiscountReason, setFreshUpDiscountReason] = useState('');
+
   const [acOrNonAc, setAcOrNonAc] = useState(activeReservation?.ac_or_non_ac || 'AC');
   const [isPreBooking, setIsPreBooking] = useState(false);
 
@@ -247,25 +260,52 @@ export default function WalkInModal({
 
   const totalNights = Math.max(1, Number(stayDays) || 1);
 
+  // Fresh-Up Rate Calculation
+  const isDayUse = bookingType === 'day_use';
+  const effectiveGroupSize = Math.max(1, Number(groupSize) || 1);
+  const perPersonRate = getFreshUpRatePerPerson(effectiveGroupSize, freshUpTiers);
+  const grossFreshUpTotal = perPersonRate * effectiveGroupSize;
+
+  let freshUpDiscountAmount = 0;
+  if (freshUpDiscountType === 'percent') {
+    freshUpDiscountAmount = Math.round((grossFreshUpTotal * (Number(freshUpDiscountValue) || 0)) / 100);
+  } else {
+    freshUpDiscountAmount = Math.min(grossFreshUpTotal, Math.max(0, Number(freshUpDiscountValue) || 0));
+  }
+  const taxableFreshUpTotal = Math.max(0, grossFreshUpTotal - freshUpDiscountAmount);
+
   // Auto-align default advance paid with calculated daily tariff for new walk-ins
   useEffect(() => {
-    if (!isReservationArrival && nightlyRate > 0) {
-      setAdvancePaid(nightlyRate);
+    if (!isReservationArrival) {
+      if (isDayUse) {
+        setAdvancePaid(taxableFreshUpTotal);
+      } else if (nightlyRate > 0) {
+        setAdvancePaid(nightlyRate * totalNights);
+      }
     }
-  }, [nightlyRate, isReservationArrival]);
+  }, [nightlyRate, isReservationArrival, isDayUse, taxableFreshUpTotal, totalNights]);
 
   // GST Calculation
   const gstFn = calculateGST || onCalculateGST;
-  const gstCalc = typeof gstFn === 'function'
-    ? gstFn(nightlyRate, totalNights)
-    : {
-        taxableRoomCharge: nightlyRate * totalNights,
-        gstRate: nightlyRate >= 2500 ? 12 : 0,
-        cgstRate: nightlyRate >= 2500 ? 6 : 0,
-        sgstRate: nightlyRate >= 2500 ? 6 : 0,
-        gstAmount: nightlyRate >= 2500 ? Math.round(nightlyRate * totalNights * 0.12) : 0,
-        grandTotal: nightlyRate >= 2500 ? Math.round(nightlyRate * totalNights * 1.12) : nightlyRate * totalNights
-      };
+  const gstCalc = isDayUse
+    ? {
+        taxableRoomCharge: taxableFreshUpTotal,
+        gstRate: taxableFreshUpTotal >= 2500 ? 12 : 0,
+        cgstRate: taxableFreshUpTotal >= 2500 ? 6 : 0,
+        sgstRate: taxableFreshUpTotal >= 2500 ? 6 : 0,
+        gstAmount: taxableFreshUpTotal >= 2500 ? Math.round(taxableFreshUpTotal * 0.12) : 0,
+        grandTotal: taxableFreshUpTotal >= 2500 ? Math.round(taxableFreshUpTotal * 1.12) : taxableFreshUpTotal
+      }
+    : (typeof gstFn === 'function'
+        ? gstFn(nightlyRate, totalNights)
+        : {
+            taxableRoomCharge: nightlyRate * totalNights,
+            gstRate: nightlyRate >= 2500 ? 12 : 0,
+            cgstRate: nightlyRate >= 2500 ? 6 : 0,
+            sgstRate: nightlyRate >= 2500 ? 6 : 0,
+            gstAmount: nightlyRate >= 2500 ? Math.round(nightlyRate * totalNights * 0.12) : 0,
+            grandTotal: nightlyRate >= 2500 ? Math.round(nightlyRate * totalNights * 1.12) : nightlyRate * totalNights
+          });
 
   const validateStep = (currentStep) => {
     if (isReservationArrival) {
@@ -347,11 +387,18 @@ export default function WalkInModal({
       return;
     }
 
-    // Case 2: Standard Walk-In or Pre-Booking (Hotel Standard Noon 12:00 PM Deadline)
+    // Case 2: Standard Walk-In or Pre-Booking (Hotel Standard Noon 12:00 PM Deadline or Fresh-Up Hours)
     const now = new Date();
     const checkInStr = now.toISOString().replace('T', ' ').slice(0, 16);
-    const checkOutDateObj = new Date(now.getFullYear(), now.getMonth(), now.getDate() + totalNights, 12, 0, 0);
-    const checkOutStr = `${checkOutDateObj.toLocaleDateString('en-CA')} 12:00`;
+    let checkOutStr = '';
+
+    if (isDayUse) {
+      const checkOutDateObj = new Date(now.getTime() + freshUpHours * 60 * 60 * 1000);
+      checkOutStr = checkOutDateObj.toISOString().replace('T', ' ').slice(0, 16);
+    } else {
+      const checkOutDateObj = new Date(now.getFullYear(), now.getMonth(), now.getDate() + totalNights, 12, 0, 0);
+      checkOutStr = `${checkOutDateObj.toLocaleDateString('en-CA')} 12:00`;
+    }
 
     const saveFn = onSaveBooking || onSubmit;
     if (typeof saveFn === 'function') {
@@ -367,11 +414,17 @@ export default function WalkInModal({
         guestNotes: notes,
         checkInDate: checkInStr,
         checkOutDate: checkOutStr,
-        nights: totalNights,
+        nights: isDayUse ? 0 : totalNights,
         acOrNonAc,
         advancePaid: Number(advancePaid || 0),
         paymentMode,
-        isPreBooking
+        isPreBooking,
+        bookingType,
+        durationHours: isDayUse ? freshUpHours : (totalNights * 24),
+        groupSize: isDayUse ? effectiveGroupSize : 1,
+        freshUpDiscountAmount,
+        freshUpDiscountReason,
+        customRateApplied: isDayUse ? taxableFreshUpTotal : null
       });
     }
 
@@ -695,6 +748,36 @@ export default function WalkInModal({
                 {/* STEP 1: STAY DURATION & ROOM SELECTION */}
                 {(isAllInOne || step === 1) && (
                   <div className="space-y-4 animate-in fade-in">
+
+                    {/* Top Segmented Booking Type Control: Overnight vs Fresh-Up */}
+                    <div className="bg-ink p-1 rounded-xl border border-brass-soft/40 grid grid-cols-2 gap-1 font-mono text-xs shadow-inner">
+                      <button
+                        type="button"
+                        onClick={() => setBookingType('overnight')}
+                        className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                          bookingType === 'overnight'
+                            ? 'bg-brass text-ink shadow-md font-extrabold'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>🌙 Overnight Stay</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setBookingType('day_use')}
+                        className={`py-2 px-3 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+                          bookingType === 'day_use'
+                            ? 'bg-amber-400 text-ink shadow-md font-extrabold'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-ink" />
+                        <span>⚡ Fresh-Up / Day Use</span>
+                      </button>
+                    </div>
+
                     {/* Returning Guest Quick Search Bar */}
                     <div className="p-3 bg-panel rounded-xl border border-brass-soft/30 space-y-2">
                       <div className="flex items-center justify-between text-[11px] font-mono">
@@ -834,97 +917,356 @@ export default function WalkInModal({
                       </div>
                     </div>
 
-                    {/* Day-Based Stay Duration Selection */}
-                    <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                          Stay Duration & Days
-                        </label>
-                        <span className="text-xs font-mono font-bold text-brass">
-                          {totalNights} {totalNights === 1 ? 'Day (24 hrs)' : 'Days'}
-                        </span>
-                      </div>
+                    {/* Day-Based Stay Duration Selection OR Fresh-Up Group Configuration */}
+                    {!isDayUse ? (
+                      <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                            Stay Duration & Days
+                          </label>
+                          <span className="text-xs font-mono font-bold text-brass">
+                            {totalNights} {totalNights === 1 ? 'Day (24 hrs)' : 'Days'}
+                          </span>
+                        </div>
 
-                      <div className="grid grid-cols-4 gap-2 font-mono text-xs">
-                        {[1, 2, 3].map(days => (
+                        <div className="grid grid-cols-4 gap-2 font-mono text-xs">
+                          {[1, 2, 3].map(days => (
+                            <button
+                              key={days}
+                              type="button"
+                              onClick={() => {
+                                setStayDays(days);
+                                setIsCustomDays(false);
+                              }}
+                              className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
+                                stayDays === days && !isCustomDays
+                                  ? 'bg-brass text-ink border-brass shadow-md shadow-brass/20'
+                                  : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
+                              }`}
+                            >
+                              <div>{days} {days === 1 ? 'Day' : 'Days'}</div>
+                            </button>
+                          ))}
+
                           <button
-                            key={days}
                             type="button"
-                            onClick={() => {
-                              setStayDays(days);
-                              setIsCustomDays(false);
-                            }}
+                            onClick={() => setIsCustomDays(true)}
                             className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
-                              stayDays === days && !isCustomDays
+                              isCustomDays
                                 ? 'bg-brass text-ink border-brass shadow-md shadow-brass/20'
                                 : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
                             }`}
                           >
-                            <div>{days} {days === 1 ? 'Day' : 'Days'}</div>
+                            <div>Custom</div>
                           </button>
-                        ))}
+                        </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setIsCustomDays(true)}
-                          className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
-                            isCustomDays
-                              ? 'bg-brass text-ink border-brass shadow-md shadow-brass/20'
-                              : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
-                          }`}
-                        >
-                          <div>Custom</div>
-                        </button>
+                        {isCustomDays && (
+                          <div className="pt-2 flex items-center justify-between bg-panel p-2.5 rounded-lg border border-brass-soft/30 animate-in fade-in">
+                            <span className="text-[11px] font-mono text-slate-300">Enter Number of Days:</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setStayDays(p => Math.max(1, p - 1))}
+                                className="w-7 h-7 rounded-lg bg-ink hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                max="60"
+                                value={stayDays}
+                                onChange={(e) => setStayDays(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-14 bg-ink border border-brass-soft rounded-lg py-1 text-center font-mono font-bold text-white text-sm focus:outline-none focus:border-brass"
+                              />
+                              <span className="text-xs font-mono text-slate-400">Days</span>
+                              <button
+                                type="button"
+                                onClick={() => setStayDays(p => p + 1)}
+                                className="w-7 h-7 rounded-lg bg-ink hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Noon-to-Noon Standard Checkout Notice */}
+                        {(() => {
+                          const now = new Date();
+                          const checkoutDue = new Date(now.getFullYear(), now.getMonth(), now.getDate() + totalNights, 12, 0, 0);
+                          return (
+                            <div className="mt-2 p-2 rounded-lg bg-panel border border-brass-soft/30 flex items-center justify-between text-[10px] font-mono text-slate-300">
+                              <span className="flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-brass" />
+                                <span>Checkout due: <strong className="text-white font-semibold">{formatDeadlineDisplay(checkoutDue)}</strong></span>
+                              </span>
+                              <span className="text-[9px] text-brass uppercase font-bold tracking-wider">
+                                12:00 PM Standard
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
+                    ) : (
+                      /* FRESH-UP CONFIGURATION: HOURS, GROUP SIZE & TIERED PRICING */
+                      <div className="bg-ink p-4 rounded-xl border border-amber-500/40 space-y-4 font-mono text-xs animate-in fade-in">
+                        <div className="flex items-center justify-between border-b border-brass-soft/20 pb-2">
+                          <div className="flex items-center gap-1.5 text-amber-300 font-bold uppercase text-[11px]">
+                            <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
+                            <span>Fresh-Up Stay & Group Tier Rates</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 text-[10px] font-bold border border-amber-400/30">
+                            ₹{perPersonRate} / person
+                          </span>
+                        </div>
 
-                      {isCustomDays && (
-                        <div className="pt-2 flex items-center justify-between bg-panel p-2.5 rounded-lg border border-brass-soft/30 animate-in fade-in">
-                          <span className="text-[11px] font-mono text-slate-300">Enter Number of Days:</span>
-                          <div className="flex items-center gap-2">
+                        {/* 1. Hour Duration Selector */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] uppercase text-slate-400 font-semibold">
+                              Fresh-Up Duration (Hours)
+                            </label>
+                            <span className="text-white font-bold">{freshUpHours} {freshUpHours === 1 ? 'Hour' : 'Hours'}</span>
+                          </div>
+
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {[1, 2, 3, 4].map(hrs => (
+                              <button
+                                key={hrs}
+                                type="button"
+                                onClick={() => {
+                                  setFreshUpHours(hrs);
+                                  setIsCustomHours(false);
+                                }}
+                                className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
+                                  freshUpHours === hrs && !isCustomHours
+                                    ? 'bg-amber-400 text-ink border-amber-400 shadow-md'
+                                    : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
+                                }`}
+                              >
+                                <div>{hrs} {hrs === 1 ? 'Hr' : 'Hrs'}</div>
+                              </button>
+                            ))}
+
                             <button
                               type="button"
-                              onClick={() => setStayDays(p => Math.max(1, p - 1))}
-                              className="w-7 h-7 rounded-lg bg-ink hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                              onClick={() => setIsCustomHours(true)}
+                              className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
+                                isCustomHours
+                                  ? 'bg-amber-400 text-ink border-amber-400 shadow-md'
+                                  : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
+                              }`}
                             >
-                              <Minus className="w-3.5 h-3.5" />
+                              <div>Custom</div>
                             </button>
-                            <input
-                              type="number"
-                              min="1"
-                              max="60"
-                              value={stayDays}
-                              onChange={(e) => setStayDays(Math.max(1, parseInt(e.target.value) || 1))}
-                              className="w-14 bg-ink border border-brass-soft rounded-lg py-1 text-center font-mono font-bold text-white text-sm focus:outline-none focus:border-brass"
-                            />
-                            <span className="text-xs font-mono text-slate-400">Days</span>
-                            <button
-                              type="button"
-                              onClick={() => setStayDays(p => p + 1)}
-                              className="w-7 h-7 rounded-lg bg-ink hover:bg-brass hover:text-ink text-white font-bold flex items-center justify-center border border-brass-soft"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
+                          </div>
+
+                          {isCustomHours && (
+                            <div className="pt-2 flex items-center justify-between bg-panel p-2.5 rounded-lg border border-brass-soft/30">
+                              <span className="text-[11px] text-slate-300">Enter Number of Hours:</span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setFreshUpHours(h => Math.max(1, h - 1))}
+                                  className="w-7 h-7 rounded-lg bg-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="12"
+                                  value={freshUpHours}
+                                  onChange={(e) => setFreshUpHours(Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="w-14 bg-ink border border-brass-soft rounded-lg py-1 text-center font-bold text-white text-sm"
+                                />
+                                <span className="text-slate-400">Hrs</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setFreshUpHours(h => h + 1)}
+                                  className="w-7 h-7 rounded-lg bg-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 2. Group Size Selector */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] uppercase text-slate-400 font-semibold flex items-center gap-1">
+                              <Users className="w-3 h-3 text-brass" />
+                              <span>Group Size (Number of Persons)</span>
+                            </label>
+                            <span className="text-white font-bold">{effectiveGroupSize} Pax</span>
+                          </div>
+
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {[1, 2, 4, 8, 15].map(pax => (
+                              <button
+                                key={pax}
+                                type="button"
+                                onClick={() => {
+                                  setGroupSize(pax);
+                                  setIsCustomGroup(false);
+                                }}
+                                className={`py-2 px-1 rounded-xl border font-bold transition-all text-center ${
+                                  groupSize === pax && !isCustomGroup
+                                    ? 'bg-amber-400 text-ink border-amber-400 shadow-md'
+                                    : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
+                                }`}
+                              >
+                                <div className="text-xs">{pax} Pax</div>
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center justify-between bg-panel p-2.5 rounded-lg border border-brass-soft/30">
+                            <span className="text-[11px] text-slate-300">Exact Headcount / Custom Pax:</span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setGroupSize(g => Math.max(1, g - 1))}
+                                className="w-7 h-7 rounded-lg bg-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                max="60"
+                                value={groupSize}
+                                onChange={(e) => setGroupSize(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-14 bg-ink border border-brass-soft rounded-lg py-1 text-center font-bold text-white text-sm"
+                              />
+                              <span className="text-slate-400">Pax</span>
+                              <button
+                                type="button"
+                                onClick={() => setGroupSize(g => g + 1)}
+                                className="w-7 h-7 rounded-lg bg-ink text-white font-bold flex items-center justify-center border border-brass-soft"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      )}
 
-                      {/* Noon-to-Noon Standard Checkout Notice */}
-                      {(() => {
-                        const now = new Date();
-                        const checkoutDue = new Date(now.getFullYear(), now.getMonth(), now.getDate() + totalNights, 12, 0, 0);
-                        return (
-                          <div className="mt-2 p-2 rounded-lg bg-panel border border-brass-soft/30 flex items-center justify-between text-[10px] font-mono text-slate-300">
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-brass" />
-                              <span>Checkout due: <strong className="text-white font-semibold">{formatDeadlineDisplay(checkoutDue)}</strong></span>
+                        {/* 3. Dedicated Fresh-Up Discount Section */}
+                        <div className="p-3 bg-panel rounded-xl border border-brass-soft/40 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase text-brass font-bold flex items-center gap-1">
+                              <Tag className="w-3.5 h-3.5" />
+                              <span>Fresh-Up Concession / Discount</span>
                             </span>
-                            <span className="text-[9px] text-brass uppercase font-bold tracking-wider">
-                              12:00 PM Standard
-                            </span>
+                            {freshUpDiscountAmount > 0 && (
+                              <span className="text-signal-green font-bold text-[11px]">
+                                - {formatCurrency(freshUpDiscountAmount)} Discount Applied
+                              </span>
+                            )}
                           </div>
-                        );
-                      })()}
-                    </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <div className="flex items-center gap-1 mb-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setFreshUpDiscountType('flat')}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    freshUpDiscountType === 'flat' ? 'bg-brass text-ink' : 'bg-ink text-slate-400'
+                                  }`}
+                                >
+                                  Flat ₹
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setFreshUpDiscountType('percent')}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    freshUpDiscountType === 'percent' ? 'bg-brass text-ink' : 'bg-ink text-slate-400'
+                                  }`}
+                                >
+                                  % Off
+                                </button>
+                              </div>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder={freshUpDiscountType === 'flat' ? 'Amount in ₹' : 'Percentage %'}
+                                value={freshUpDiscountValue || ''}
+                                onChange={(e) => setFreshUpDiscountValue(Math.max(0, Number(e.target.value) || 0))}
+                                className="w-full bg-ink border border-brass-soft rounded-lg px-2.5 py-1 text-white font-bold text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-slate-400 uppercase block mb-1">Discount Reason:</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Tour Guide Free / Group Deal"
+                                value={freshUpDiscountReason}
+                                onChange={(e) => setFreshUpDiscountReason(e.target.value)}
+                                className="w-full bg-ink border border-brass-soft rounded-lg px-2.5 py-1 text-white text-xs placeholder-slate-500"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Quick Discount Presets */}
+                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                            <span className="text-[9.5px] text-slate-400">Quick:</span>
+                            {[
+                              { label: '₹50 Off', val: 50, type: 'flat' },
+                              { label: '₹100 Off', val: 100, type: 'flat' },
+                              { label: '10% Off', val: 10, type: 'percent' },
+                              { label: `Free 1 Pax (-₹${perPersonRate})`, val: perPersonRate, type: 'flat', reason: 'Tour Leader Complimentary' }
+                            ].map((chip, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                  setFreshUpDiscountType(chip.type);
+                                  setFreshUpDiscountValue(chip.val);
+                                  if (chip.reason) setFreshUpDiscountReason(chip.reason);
+                                }}
+                                className="px-2 py-0.5 rounded bg-ink hover:bg-brass-soft/30 border border-brass-soft/30 text-[9.5px] text-slate-300 hover:text-white"
+                              >
+                                {chip.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 4. Live Fresh-Up Calculation Summary */}
+                        <div className="p-2.5 rounded-lg bg-panel border border-brass-soft/30 space-y-1 text-[11px]">
+                          <div className="flex items-center justify-between text-slate-300">
+                            <span>Gross Tariff ({effectiveGroupSize} Pax @ ₹{perPersonRate}/person):</span>
+                            <span className="font-bold text-white">{formatCurrency(grossFreshUpTotal)}</span>
+                          </div>
+                          {freshUpDiscountAmount > 0 && (
+                            <div className="flex items-center justify-between text-signal-green">
+                              <span>Concession / Discount ({freshUpDiscountReason || 'Counter'}):</span>
+                              <span className="font-bold">- {formatCurrency(freshUpDiscountAmount)}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between pt-1 border-t border-brass-soft/20 text-white font-bold">
+                            <span>Net Room Charge:</span>
+                            <span className="text-amber-400 text-sm">{formatCurrency(taxableFreshUpTotal)}</span>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 text-[10px] text-amber-300/90 font-mono">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-amber-400" />
+                              <span>Departure Deadline:</span>
+                            </span>
+                            <strong className="text-white">
+                              Today, {new Date(Date.now() + freshUpHours * 60 * 60 * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            </strong>
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
                   </div>
                 )}
 

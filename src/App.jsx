@@ -26,6 +26,7 @@ import IdDocumentViewerModal from './components/IdDocumentViewerModal';
 import GSTSettingsModal from './components/GSTSettingsModal';
 import DatabaseSettingsModal from './components/DatabaseSettingsModal';
 import GuestDossierModal from './components/GuestDossierModal';
+import FreshUpTiersModal from './components/FreshUpTiersModal';
 
 export default function App() {
   const store = usePMSStore();
@@ -57,6 +58,7 @@ export default function App() {
   const [isWiFiModalOpen, setIsWiFiModalOpen] = useState(false);
   const [wiFiModalRoom, setWiFiModalRoom] = useState(null);
   const [wiFiModalBooking, setWiFiModalBooking] = useState(null);
+  const [isFreshUpTiersModalOpen, setIsFreshUpTiersModalOpen] = useState(false);
 
   const [isSelfCheckinModalOpen, setIsSelfCheckinModalOpen] = useState(false);
   const [isSeasonalModalOpen, setIsSeasonalModalOpen] = useState(false);
@@ -235,6 +237,7 @@ export default function App() {
             onOpenSearch={() => setIsSearchOpen(true)}
             onOpenStaffAdmin={() => setIsStaffAdminOpen(true)}
             onOpenGSTSettings={() => setIsGSTModalOpen(true)}
+            onOpenFreshUpTiers={() => setIsFreshUpTiersModalOpen(true)}
             onSignOut={handleSignOut}
             dirtyCount={store.stats.dirtyRooms}
             property={store.property}
@@ -406,6 +409,7 @@ export default function App() {
           selectedRoom={walkInSelectedRoom}
           preselectedGuest={walkInSelectedGuest}
           preselectedReservation={walkInSelectedReservation}
+          freshUpTiers={store.freshUpTiers}
           onSaveBooking={handleSaveBooking}
           onCheckInReservation={store.actions.checkInAdvanceReservation}
           onLookupPhone={store.actions.findGuestByPhone}
@@ -527,6 +531,16 @@ export default function App() {
             const newPropId = store.actions.onboardNewProperty(propData);
             setActiveTab('grid');
           }}
+        />
+      )}
+
+      {/* 10. Fresh-Up / Day-Use Tiered Rate Settings Modal */}
+      {isFreshUpTiersModalOpen && (
+        <FreshUpTiersModal
+          isOpen={isFreshUpTiersModalOpen}
+          onClose={() => setIsFreshUpTiersModalOpen(false)}
+          tiers={store.freshUpTiers}
+          onSaveTiers={store.actions.updateFreshUpTiers}
         />
       )}
 

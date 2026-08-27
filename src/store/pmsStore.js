@@ -14,7 +14,9 @@ import {
   SEED_SELF_CHECKINS,
   SEED_EXPENSES,
   SEED_SEASONAL_OVERRIDES,
-  SEED_HEATMAP_DATA
+  SEED_HEATMAP_DATA,
+  DEFAULT_FRESH_UP_TIERS,
+  getFreshUpRatePerPerson
 } from '../types/data';
 import {
   saveRoomToSupabase,
@@ -167,6 +169,7 @@ export function usePMSStore() {
     properties: SEED_PROPERTIES,
     roomTypes: ROOM_TYPES,
     gstConfig: DEFAULT_GST_CONFIG,
+    freshUpTiers: DEFAULT_FRESH_UP_TIERS,
     rooms: SEED_ROOMS,
     guests: SEED_GUESTS,
     bookings: SEED_BOOKINGS,
@@ -208,7 +211,8 @@ export function usePMSStore() {
           auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : SEED_AUDIT_LOGS,
           selfCheckins: Array.isArray(parsed.selfCheckins) ? parsed.selfCheckins : SEED_SELF_CHECKINS,
           roomTypes: parsed.roomTypes && typeof parsed.roomTypes === 'object' ? parsed.roomTypes : ROOM_TYPES,
-          gstConfig: parsed.gstConfig && typeof parsed.gstConfig === 'object' ? parsed.gstConfig : DEFAULT_GST_CONFIG
+          gstConfig: parsed.gstConfig && typeof parsed.gstConfig === 'object' ? parsed.gstConfig : DEFAULT_GST_CONFIG,
+          freshUpTiers: Array.isArray(parsed.freshUpTiers) ? parsed.freshUpTiers : DEFAULT_FRESH_UP_TIERS
         };
       }
     } catch (e) {
@@ -511,6 +515,13 @@ export function usePMSStore() {
           const { guest } = mutation;
           const nextGuests = (prev.guests || []).map(g => g.id === guest?.id ? { ...g, ...guest } : g);
           return { ...prev, guests: nextGuests };
+        }
+
+        case 'FRESH_UP_TIERS_UPDATE': {
+          if (Array.isArray(mutation.tiers)) {
+            return { ...prev, freshUpTiers: mutation.tiers };
+          }
+          return prev;
         }
 
         case 'SNAPSHOT_SYNC': {
@@ -870,7 +881,13 @@ export function usePMSStore() {
     advancePaid,
     paymentMode,
     isPreBooking,
-    created_by_staff_name
+    created_by_staff_name,
+    bookingType = 'overnight',
+    durationHours = 24,
+    groupSize = 1,
+    freshUpDiscountAmount = 0,
+    freshUpDiscountReason = '',
+    customRateApplied = null
   }) => {
     const room = (state.rooms || SEED_ROOMS).find(r => r.id === roomId);
     if (!room) return;
@@ -927,8 +944,17 @@ export function usePMSStore() {
       (new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24)
     )) || 1;
 
-    const rateLookup = getRateForRoom(room.room_type_id, acOrNonAc, checkInDate);
-    const rateApplied = rateLookup.rate;
+    const isDayUse = bookingType === 'day_use';
+    let rateApplied = rateLookup.rate;
+    if (isDayUse) {
+      if (customRateApplied !== null && customRateApplied !== undefined) {
+        rateApplied = Number(customRateApplied);
+      } else {
+        const perPerson = getFreshUpRatePerPerson(groupSize, state.freshUpTiers || DEFAULT_FRESH_UP_TIERS);
+        rateApplied = perPerson * Math.max(1, Number(groupSize) || 1);
+      }
+    }
+
     const bookingId = `bk-${room.room_number}-${Date.now().toString().slice(-4)}`;
     const wifiCode = generateWiFiCode(room.room_number);
 
@@ -939,11 +965,16 @@ export function usePMSStore() {
       guest_id: guestId,
       check_in_date: checkInDate,
       check_out_date: checkOutDate,
-      nights,
+      nights: isDayUse ? 0 : nights,
+      booking_type: isDayUse ? 'day_use' : 'overnight',
+      duration_hours: isDayUse ? Number(durationHours) : null,
+      group_size: isDayUse ? Number(groupSize) : 1,
+      discount_amount: Number(freshUpDiscountAmount || 0),
+      discount_reason: freshUpDiscountReason || '',
       ac_or_non_ac: acOrNonAc,
       rate_applied: rateApplied,
-      is_seasonal_rate: rateLookup.isOverridden,
-      seasonal_name: rateLookup.overrideName,
+      is_seasonal_rate: isDayUse ? false : rateLookup.isOverridden,
+      seasonal_name: isDayUse ? 'Fresh-Up / Day-Use Slabs' : rateLookup.overrideName,
       status: isPreBooking ? 'confirmed' : 'checked_in',
       advance_paid: Number(advancePaid || 0),
       payment_mode: paymentMode || 'Cash',
@@ -957,7 +988,10 @@ export function usePMSStore() {
       ...room,
       status: nextRoomStatus,
       current_booking_id: bookingId,
-      wifi_voucher_code: wifiCode
+      wifi_voucher_code: wifiCode,
+      is_day_use: isDayUse,
+      day_use_end_time: isDayUse ? checkOutDate : null,
+      group_size: isDayUse ? Number(groupSize) : null
     };
 
     const auditEntry = logAudit(
@@ -1154,19 +1188,28 @@ export function usePMSStore() {
     if (!booking) return;
 
     const guest = (state.guests || []).find(g => g.id === booking.guest_id);
+    const isDayUse = booking.booking_type === 'day_use';
+    let nights = 1;
+    let grossRoomCharge = 0;
 
-    // Apply hotel-standard noon-to-noon billing rules (12:00 PM cutoff)
-    const billingInfo = calculateCheckoutBilling({
-      checkInDate: booking.check_in_date,
-      plannedNights: booking.nights || 1,
-      checkoutTimestamp: new Date()
-    });
-    const nights = Math.max(booking.nights || 1, billingInfo.billableNights);
-    const grossRoomCharge = booking.rate_applied * nights;
+    if (isDayUse) {
+      nights = 0;
+      grossRoomCharge = Number(booking.rate_applied || 0);
+    } else {
+      // Apply hotel-standard noon-to-noon billing rules (12:00 PM cutoff)
+      const billingInfo = calculateCheckoutBilling({
+        checkInDate: booking.check_in_date,
+        plannedNights: booking.nights || 1,
+        checkoutTimestamp: new Date()
+      });
+      nights = Math.max(booking.nights || 1, billingInfo.billableNights);
+      grossRoomCharge = booking.rate_applied * nights;
+    }
 
-    const finalDiscount = Number(discountAmount) || 0;
+    const finalDiscount = Number(discountAmount !== undefined ? discountAmount : (booking.discount_amount || 0));
+    const finalReason = discountReason || booking.discount_reason || (finalDiscount > 0 ? 'Fresh-Up Concession / Courtesy' : '');
     const taxableRoomCharge = Math.max(0, grossRoomCharge - finalDiscount);
-    const gstCalc = calculateGST(taxableRoomCharge > 0 ? (taxableRoomCharge / nights) : 0, nights);
+    const gstCalc = calculateGST(taxableRoomCharge > 0 ? (taxableRoomCharge / (nights || 1)) : 0, nights || 1);
 
     const grandTotal = taxableRoomCharge + gstCalc.gstAmount;
     const balanceSettled = Math.max(0, grandTotal - (booking.advance_paid || 0));
@@ -1182,12 +1225,15 @@ export function usePMSStore() {
       guest_name: guest?.name || 'Guest',
       guest_phone: guest?.phone || '',
       nights,
+      is_day_use: isDayUse,
+      duration_hours: booking.duration_hours || 2,
+      group_size: booking.group_size || 1,
       rate_applied: booking.rate_applied,
       ac_or_non_ac: booking.ac_or_non_ac,
       gross_room_charge: grossRoomCharge,
       discount_amount: finalDiscount,
-      discount_type: discountType,
-      discount_reason: discountReason || 'Counter Courtesy / Special Discount',
+      discount_type: discountType || 'flat',
+      discount_reason: finalReason || 'Counter Courtesy / Special Discount',
       room_charge: taxableRoomCharge,
       gst_rate: gstCalc.gstRate,
       gst_amount: gstCalc.gstAmount,
@@ -1576,6 +1622,19 @@ export function usePMSStore() {
         shiftLogs: scopedShiftLogs,
         auditLogs: scopedAuditLogs
       }),
+      updateFreshUpTiers: (newTiers) => {
+        setState(prev => ({
+          ...prev,
+          freshUpTiers: newTiers
+        }));
+        try {
+          localStorage.setItem('taj_fresh_up_tiers', JSON.stringify(newTiers));
+        } catch (e) {}
+        realtimeRelay.broadcastMutation({
+          type: 'FRESH_UP_TIERS_UPDATE',
+          tiers: newTiers
+        });
+      },
       loginStaff,
       quickSwitchStaff,
       setViewMode,

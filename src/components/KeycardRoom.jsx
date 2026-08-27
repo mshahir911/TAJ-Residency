@@ -14,7 +14,8 @@ import {
   Wifi,
   Key,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  Zap
 } from 'lucide-react';
 import { ROOM_TYPES } from '../types/data';
 import { formatCurrency } from '../utils/formatters';
@@ -182,8 +183,32 @@ export default function KeycardRoom({
                 )}
               </div>
 
-              {/* Checkout Due Deadline Indicator */}
+              {/* Checkout Due Deadline Indicator (Fresh-Up or Overnight) */}
               {(() => {
+                const isDayUse = booking.booking_type === 'day_use' || room.is_day_use;
+                if (isDayUse) {
+                  const checkOutTime = new Date(booking.check_out_date || room.day_use_end_time || Date.now());
+                  const isOverdue = Date.now() > checkOutTime.getTime();
+                  const timeFormatted = checkOutTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                  const pax = booking.group_size || room.group_size || 1;
+
+                  return (
+                    <div className={`mt-1 px-1.5 py-0.5 rounded flex items-center justify-between font-mono text-[8.5px] sm:text-[9.5px] border ${
+                      isOverdue
+                        ? 'bg-rose-950/60 border-rose-500/40 text-rose-300'
+                        : 'bg-amber-950/50 border-amber-500/40 text-amber-200'
+                    }`}>
+                      <span className="truncate flex items-center gap-1">
+                        <Zap className="w-2.5 h-2.5 text-amber-400 fill-amber-400 shrink-0" />
+                        <span>Fresh-Up until <strong className="text-white font-bold">{timeFormatted}</strong></span>
+                      </span>
+                      <span className="text-[8px] font-bold uppercase px-1 rounded bg-amber-400 text-ink shrink-0 ml-1">
+                        {pax} Pax
+                      </span>
+                    </div>
+                  );
+                }
+
                 const billing = calculateCheckoutBilling({
                   checkInDate: booking.check_in_date,
                   plannedNights: booking.nights || 1

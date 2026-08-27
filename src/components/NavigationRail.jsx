@@ -17,7 +17,8 @@ import {
   LogOut,
   Percent,
   Moon,
-  Sun
+  Sun,
+  Zap
 } from 'lucide-react';
 import TajLogo from './TajLogo';
 import { getInitialTheme, toggleTheme } from '../utils/theme';
@@ -29,11 +30,13 @@ export default function NavigationRail({
   onOpenSearch,
   onOpenStaffAdmin,
   onOpenGSTSettings,
+  onOpenFreshUpTiers,
   onSignOut,
   dirtyCount,
   property,
   currentStaff,
-  currentRole = 'desk'
+  currentRole = 'desk',
+  isCollapsed = false
 }) {
   const [theme, setTheme] = useState(getInitialTheme);
 
@@ -66,6 +69,7 @@ export default function NavigationRail({
       { id: 'pl', label: 'Monthly P&L & Expenses', icon: Wallet, shortcut: 'P' },
       { id: 'gst', label: 'GST & Tax Settings', icon: Percent, shortcut: 'T' },
       { id: 'overrides', label: 'Seasonal Rate Overrides', icon: Tag, shortcut: 'R' },
+      { id: 'freshup', label: 'Fresh-Up Group Slabs', icon: Zap, shortcut: 'F' },
       { id: 'staff', label: 'Staff Admin & PINs', icon: Users, shortcut: 'S' },
       { id: 'audit', label: 'Operations Audit Trail', icon: ShieldCheck, shortcut: 'A' },
       { id: 'onboarding', label: 'Property Setup Wizard', icon: Building2, shortcut: 'W' }
@@ -140,6 +144,8 @@ export default function NavigationRail({
                     onOpenStaffAdmin();
                   } else if (item.id === 'gst') {
                     onOpenGSTSettings();
+                  } else if (item.id === 'freshup') {
+                    if (typeof onOpenFreshUpTiers === 'function') onOpenFreshUpTiers();
                   } else {
                     setActiveTab(item.id);
                   }

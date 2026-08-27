@@ -17,7 +17,8 @@ import {
   Gift,
   ArrowLeft,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Zap
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { formatCurrency, formatDateTime } from '../utils/formatters';
@@ -79,22 +80,25 @@ export default function FolioModal({
 
   // Discount / Concession state
   const [discountType, setDiscountType] = useState('flat'); // 'flat' | 'percent'
-  const [discountValue, setDiscountValue] = useState(0); // number
-  const [discountReason, setDiscountReason] = useState('');
+  const [discountValue, setDiscountValue] = useState(() => booking.discount_amount || 0);
+  const [discountReason, setDiscountReason] = useState(() => booking.discount_reason || '');
 
   // When booking prop updates, keep localNights synced with noon-to-noon calculation
   useEffect(() => {
-    const updatedBilling = calculateCheckoutBilling({
-      checkInDate: booking.check_in_date,
-      plannedNights: booking.nights || 1,
-      checkoutTimestamp: new Date()
-    });
-    setLocalNights(Math.max(booking.nights || 1, updatedBilling.billableNights));
-  }, [booking.nights, booking.check_in_date]);
+    if (booking.booking_type !== 'day_use') {
+      const updatedBilling = calculateCheckoutBilling({
+        checkInDate: booking.check_in_date,
+        plannedNights: booking.nights || 1,
+        checkoutTimestamp: new Date()
+      });
+      setLocalNights(Math.max(booking.nights || 1, updatedBilling.billableNights));
+    }
+  }, [booking.nights, booking.check_in_date, booking.booking_type]);
 
-  const nights = localNights || 1;
+  const isDayUse = booking.booking_type === 'day_use';
+  const nights = isDayUse ? 0 : (localNights || 1);
   const rateApplied = booking.rate_applied || 2000;
-  const grossRoomCharge = rateApplied * nights;
+  const grossRoomCharge = isDayUse ? rateApplied : (rateApplied * (nights || 1));
 
   // Calculate discount amount
   let calculatedDiscount = 0;
@@ -261,74 +265,104 @@ _We look forward to welcoming you back to Calicut!_`;
         {/* Billing Body with Native Touch Momentum Scroll */}
         <div className="p-4 sm:p-5 space-y-4 flex-1 min-h-0 overflow-y-auto overscroll-contain touch-scroll text-xs">
 
-          {/* Hotel Standard Noon-to-Noon Billing Schedule */}
-          <div className="bg-ink p-3.5 rounded-xl border border-brass-soft/40 space-y-2.5 font-mono">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-brass font-bold flex items-center gap-1.5 uppercase">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Stay Duration: {nights} {nights === 1 ? 'Night' : 'Nights'}</span>
-              </span>
-              <span className="text-slate-400 text-[11px]">
-                ₹{rateApplied}/night • {booking.ac_or_non_ac}
-              </span>
-            </div>
-
-            {/* Check-in & Noon Checkout Deadline Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-lg bg-panel border border-brass-soft/20 text-[11px]">
-              <div>
-                <span className="text-slate-400 block text-[9.5px] uppercase font-bold">Check-in Date & Time:</span>
-                <span className="text-white font-semibold">{booking.check_in_date || 'Today'}</span>
+          {/* Hotel Standard Noon-to-Noon Billing Schedule OR Fresh-Up Schedule */}
+          {isDayUse ? (
+            <div className="bg-ink p-3.5 rounded-xl border border-amber-500/40 space-y-2.5 font-mono">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-amber-400 font-bold flex items-center gap-1.5 uppercase">
+                  <Zap className="w-3.5 h-3.5 fill-amber-400" />
+                  <span>Fresh-Up Stay: {booking.duration_hours || 2} Hours ({booking.group_size || 1} Pax)</span>
+                </span>
+                <span className="text-slate-400 text-[11px]">
+                  ₹{rateApplied} total • {booking.ac_or_non_ac}
+                </span>
               </div>
-              <div>
-                <span className="text-slate-400 block text-[9.5px] uppercase font-bold">Checkout Due (12:00 PM Noon):</span>
-                <span className="text-brass font-bold">{billingInfo.scheduledDeadlineDisplay}</span>
-              </div>
-            </div>
 
-            {/* Overdue / On-Time Banner */}
-            {billingInfo.isOverdue ? (
-              <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/50 text-rose-200 text-xs space-y-1">
-                <div className="flex items-center gap-1.5 text-rose-300 font-bold">
-                  <Clock className="w-4 h-4 text-rose-400 shrink-0" />
-                  <span>Late Checkout Charge Applied (+{billingInfo.extraNights} Night)</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-lg bg-panel border border-amber-500/20 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block text-[9.5px] uppercase font-bold">Check-in Time:</span>
+                  <span className="text-white font-semibold">{booking.check_in_date || 'Today'}</span>
                 </div>
-                <p className="text-[11px] text-rose-200/90 font-sans">
-                  Actual checkout is past the 12:00 PM standard deadline. In accordance with noon-to-noon hotel billing policy, stay has been rounded up to {billingInfo.billableNights} full nights.
-                </p>
+                <div>
+                  <span className="text-slate-400 block text-[9.5px] uppercase font-bold">Departure Due:</span>
+                  <span className="text-amber-300 font-bold">{booking.check_out_date || 'Today'}</span>
+                </div>
               </div>
-            ) : (
-              <div className="px-2.5 py-1.5 rounded-lg bg-signal-green/10 border border-signal-green/30 text-signal-green text-[11px] flex items-center gap-1.5">
+
+              <div className="px-2.5 py-1.5 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[11px] flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>On Time: Within 12:00 PM standard checkout deadline.</span>
+                <span>Short-duration fresh-up stay &bull; Flat per-person tiered tariff</span>
               </div>
-            )}
-
-            {/* Extend Stay Controls */}
-            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-brass-soft/20">
-              <span className="text-[10px] text-slate-400">Manual Extend:</span>
-              <button
-                type="button"
-                onClick={() => handleExtend(1)}
-                className="py-1.5 px-3 rounded-lg bg-brass text-ink font-mono font-bold text-xs hover:brightness-110 shadow-sm shadow-brass/20 flex items-center gap-1 active:scale-95 transition-all"
-              >
-                <span>+1 Night ({formatCurrency(rateApplied)})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExtend(2)}
-                className="py-1.5 px-3 rounded-lg bg-panel hover:bg-ink text-slate-200 border border-brass-soft/40 font-mono font-bold text-xs flex items-center gap-1 active:scale-95 transition-all"
-              >
-                <span>+2 Nights ({formatCurrency(rateApplied * 2)})</span>
-              </button>
             </div>
-
-            {extensionMessage && (
-              <div className="text-[11px] text-signal-green flex items-center gap-1 animate-in fade-in">
-                <Sparkles className="w-3 h-3" />
-                <span>{extensionMessage}</span>
+          ) : (
+            <div className="bg-ink p-3.5 rounded-xl border border-brass-soft/40 space-y-2.5 font-mono">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-brass font-bold flex items-center gap-1.5 uppercase">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Stay Duration: {nights} {nights === 1 ? 'Night' : 'Nights'}</span>
+                </span>
+                <span className="text-slate-400 text-[11px]">
+                  ₹{rateApplied}/night • {booking.ac_or_non_ac}
+                </span>
               </div>
-            )}
-          </div>
+
+              {/* Check-in & Noon Checkout Deadline Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-lg bg-panel border border-brass-soft/20 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block text-[9.5px] uppercase font-bold">Check-in Date & Time:</span>
+                  <span className="text-white font-semibold">{booking.check_in_date || 'Today'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[9.5px] uppercase font-bold">Checkout Due (12:00 PM Noon):</span>
+                  <span className="text-brass font-bold">{billingInfo.scheduledDeadlineDisplay}</span>
+                </div>
+              </div>
+
+              {/* Overdue / On-Time Banner */}
+              {billingInfo.isOverdue ? (
+                <div className="p-2.5 rounded-lg bg-rose-950/70 border border-rose-500/50 text-rose-200 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-rose-300 font-bold">
+                    <Clock className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span>Late Checkout Charge Applied (+{billingInfo.extraNights} Night)</span>
+                  </div>
+                  <p className="text-[11px] text-rose-200/90 font-sans">
+                    Actual checkout is past the 12:00 PM standard deadline. In accordance with noon-to-noon hotel billing policy, stay has been rounded up to {billingInfo.billableNights} full nights.
+                  </p>
+                </div>
+              ) : (
+                <div className="px-2.5 py-1.5 rounded-lg bg-signal-green/10 border border-signal-green/30 text-signal-green text-[11px] flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span>On Time: Within 12:00 PM standard checkout deadline.</span>
+                </div>
+              )}
+
+              {/* Extend Stay Controls */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-brass-soft/20">
+                <span className="text-[10px] text-slate-400">Manual Extend:</span>
+                <button
+                  type="button"
+                  onClick={() => handleExtend(1)}
+                  className="py-1.5 px-3 rounded-lg bg-brass text-ink font-mono font-bold text-xs hover:brightness-110 shadow-sm shadow-brass/20 flex items-center gap-1 active:scale-95 transition-all"
+                >
+                  <span>+1 Night ({formatCurrency(rateApplied)})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExtend(2)}
+                  className="py-1.5 px-3 rounded-lg bg-panel hover:bg-ink text-slate-200 border border-brass-soft/40 font-mono font-bold text-xs flex items-center gap-1 active:scale-95 transition-all"
+                >
+                  <span>+2 Nights ({formatCurrency(rateApplied * 2)})</span>
+                </button>
+              </div>
+
+              {extensionMessage && (
+                <div className="text-[11px] text-signal-green flex items-center gap-1 animate-in fade-in">
+                  <Sparkles className="w-3 h-3" />
+                  <span>{extensionMessage}</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* User Request: Billing Discount & Concession Tool */}
           <div className="bg-panel p-3.5 rounded-xl border border-brass/40 space-y-2.5">
