@@ -376,7 +376,16 @@ _Automated End-of-Day Tally • Taj Residency PMS_`;
                   {reconciliation.invoices.map((inv, idx) => (
                     <tr key={inv.id || idx} className="hover:bg-panel/40 transition-colors">
                       <td className="p-3 font-bold text-brass">{inv.id}</td>
-                      <td className="p-3 font-bold text-white">Room {inv.room_number}</td>
+                      <td className="p-3 font-bold text-white">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{String(inv.room_number || '').includes(',') ? `Rooms ${inv.room_number}` : `Room ${inv.room_number}`}</span>
+                          {inv.is_day_use && (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-mono font-bold">
+                              ⚡ Fresh-Up ({inv.group_size || 1} Pax)
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-3">
                         <div className="font-sans font-medium text-slate-200">{inv.guest_name}</div>
                         <div className="text-[11px] text-slate-400">{inv.guest_phone || '—'}</div>

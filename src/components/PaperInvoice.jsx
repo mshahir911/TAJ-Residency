@@ -41,6 +41,11 @@ export default function PaperInvoice({
   const legalEntity = gstConfig?.legalEntity || property?.legal_entity || property?.name || 'Taj Residency';
 
   const roomNum = (booking?.linked_room_numbers?.length > 1 ? booking.linked_room_numbers.join(', ') : null) || invoice?.room_number || room?.room_number || 'Room';
+  const isMultiRoom = String(roomNum).includes(',') || (booking?.linked_room_numbers?.length > 1);
+  const roomCount = isMultiRoom ? String(roomNum).split(',').length : 1;
+  const isDayUse = Boolean(invoice?.is_day_use || booking?.booking_type === 'day_use' || (invoice?.duration_hours && Number(invoice?.nights) === 0));
+  const durationHours = invoice?.duration_hours || booking?.duration_hours || 2;
+  const groupSize = invoice?.group_size || booking?.group_size || 1;
   const invoiceNo = invoice?.id || `TR/INV/${String(roomNum).replace(/[^0-9]/g, '').slice(0, 8) || 'MAIN'}/${Math.floor(1000 + Math.random() * 9000)}`;
   const invoiceDate = invoice?.paid_at || new Date().toLocaleDateString('en-IN', {
     day: '2-digit',
@@ -139,19 +144,17 @@ export default function PaperInvoice({
     const hotelName = property?.name || 'Taj Residency';
     const msg = `🏛️ *${hotelName.toUpperCase()} — TAX INVOICE & RECEIPT*
 Invoice No: *${invoiceNo}*
-Room: *${roomNum} (${invoice?.ac_or_non_ac || 'AC'})*
+${isMultiRoom ? `Rooms (${roomCount} Rooms): *${roomNum}*` : `Room: *${roomNum}*`} (${invoice?.ac_or_non_ac || booking?.ac_or_non_ac || 'AC'})${isDayUse ? ` • *Team Fresh-Up (${groupSize} Pax, ${durationHours}h)*` : ''}
 
 Dear *${guestName}*,
-Thank you for staying at Taj Residency, Kozhikode. Here is your final tax invoice summary:
+Thank you for staying at ${hotelName}, Kozhikode. Here is your final tax invoice summary:
 
-📋 *Gross Tariff (${nights} Days @ ₹${rateApplied}):* ₹${grossRoomCharge.toLocaleString('en-IN')}
+📋 *Gross Tariff (${isDayUse ? `${durationHours} Hours (${groupSize} Pax in ${isMultiRoom ? `${roomCount} Rooms: ${roomNum}` : `Room ${roomNum}`})` : `${nights} Days @ ₹${rateApplied}`}):* ₹${grossRoomCharge.toLocaleString('en-IN')}
 ${discountAmount > 0 ? `🏷️ *Discount / Concession:* -₹${discountAmount.toLocaleString('en-IN')} (${discountReason})\n` : ''}📊 *Taxable Value:* ₹${taxableRoomCharge.toLocaleString('en-IN')}
 📊 *GST (CGST 6% + SGST 6%):* ₹${gstAmount.toLocaleString('en-IN')}
-💰 *Total Bill (GST Inc.):* ₹${grandTotal.toLocaleString('en-IN')}
-💳 *Advance Received:* ₹${advancePaid.toLocaleString('en-IN')}
-✅ *Final Balance Settled (${paymentMode}):* ₹${balanceSettled.toLocaleString('en-IN')}
+💰 *Total Settled:* ₹${grandTotal.toLocaleString('en-IN')} (${paymentMode})
 
-GSTIN: ${property?.gst_number || '32AABCT9988Q1Z4'}
+GSTIN: ${gstinDisplay}
 SAC Code: 996311 (Hotel Accommodation)
 
 _Thank you for choosing Taj Residency!_`;
@@ -270,7 +273,7 @@ _Thank you for choosing Taj Residency!_`;
               <div className="mt-2 text-xs font-mono space-y-0.5">
                 <div><span className="text-slate-500">Invoice No:</span> <span className="font-bold">{invoiceNo}</span></div>
                 <div><span className="text-slate-500">Date:</span> {invoiceDate}</div>
-                <div><span className="text-slate-500">Room:</span> <span className="font-bold">{roomNum} ({invoice?.ac_or_non_ac || booking?.ac_or_non_ac || 'AC'})</span></div>
+                <div><span className="text-slate-500">{isMultiRoom ? 'Rooms:' : 'Room:'}</span> <span className="font-bold">{isMultiRoom ? `${roomNum} (${roomCount} Rooms • Team Fresh-Up)` : `${roomNum} (${invoice?.ac_or_non_ac || booking?.ac_or_non_ac || 'AC'})`}</span></div>
               </div>
             </div>
           </div>
@@ -301,9 +304,9 @@ _Thank you for choosing Taj Residency!_`;
               </span>
               <div><span className="text-slate-500">Check-In:</span> {booking?.check_in_date || '2026-08-07 14:00'}</div>
               <div>
-                <span className="text-slate-500">Total Duration:</span>{' '}
-                {booking?.booking_type === 'day_use'
-                  ? `Fresh-Up (${booking?.duration_hours || 2} Hrs, ${booking?.group_size || 1} Pax)`
+                <span className="text-slate-500">Total Duration / Scope:</span>{' '}
+                {isDayUse
+                  ? `Fresh-Up (${durationHours} Hrs • ${groupSize} Pax in ${isMultiRoom ? `${roomCount} Rooms: ${roomNum}` : `Room ${roomNum}`})`
                   : `${nights} Night(s) (12:00 PM Noon Basis)`}
               </div>
               <div><span className="text-slate-500">Payment Mode:</span> {paymentMode}</div>
@@ -317,8 +320,8 @@ _Thank you for choosing Taj Residency!_`;
                 <th className="p-2">#</th>
                 <th className="p-2">SAC Code</th>
                 <th className="p-2">Description</th>
-                <th className="p-2 text-center">{booking?.booking_type === 'day_use' ? 'Hours' : 'Days'}</th>
-                <th className="p-2 text-right">{booking?.booking_type === 'day_use' ? 'Tariff' : 'Tariff / Day'}</th>
+                <th className="p-2 text-center">{isDayUse ? 'Hours' : 'Days'}</th>
+                <th className="p-2 text-right">{isDayUse ? 'Tariff' : 'Tariff / Day'}</th>
                 <th className="p-2 text-right">Taxable Value</th>
                 <th className="p-2 text-right">GST</th>
                 <th className="p-2 text-right">Amount (INR)</th>
@@ -329,11 +332,11 @@ _Thank you for choosing Taj Residency!_`;
                 <td className="p-2 text-slate-500">1</td>
                 <td className="p-2 text-slate-600">{sacCode}</td>
                 <td className="p-2 font-sans font-medium text-black">
-                  {booking?.booking_type === 'day_use'
-                    ? `Fresh-Up Day Accommodation (${booking?.linked_room_numbers?.length > 1 ? `${booking.linked_room_numbers.length} Rooms: ${booking.linked_room_numbers.join(', ')} • ` : ''}${booking?.duration_hours || 2} Hours, ${booking?.group_size || 1} Pax @ Tiered Rate • ${booking?.ac_or_non_ac || 'AC'})`
-                    : `Room Accommodation (${room?.room_type_id === 'deluxe' ? 'Deluxe Room' : 'Classic Room'} - ${booking?.ac_or_non_ac || 'AC'})`}
+                  {isDayUse
+                    ? `Fresh-Up Day Accommodation (${isMultiRoom ? `${roomCount} Rooms (${roomNum}) • ` : `Room ${roomNum} • `}${durationHours} Hours, ${groupSize} Pax @ Tiered Rate • ${invoice?.ac_or_non_ac || booking?.ac_or_non_ac || 'AC'})`
+                    : `Room Accommodation (${room?.room_type_id === 'deluxe' ? 'Deluxe Room' : 'Classic Room'} - ${booking?.ac_or_non_ac || invoice?.ac_or_non_ac || 'AC'})`}
                 </td>
-                <td className="p-2 text-center">{booking?.booking_type === 'day_use' ? `${booking?.duration_hours || 2}h` : nights}</td>
+                <td className="p-2 text-center">{isDayUse ? `${durationHours}h` : nights}</td>
                 <td className="p-2 text-right">{formatCurrency(rateApplied)}</td>
                 <td className="p-2 text-right">{formatCurrency(grossRoomCharge)}</td>
                 <td className="p-2 text-right">12%</td>

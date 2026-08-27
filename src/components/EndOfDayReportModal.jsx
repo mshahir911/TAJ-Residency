@@ -471,7 +471,14 @@ _Automated Midnight Audit Summary • Taj Residency FrontDesk OS_`;
                     {invoices.map(inv => (
                       <tr key={inv.id} className="hover:bg-[#FAF8F5]">
                         <td className="p-2.5 font-bold text-[#11161D]">{inv.id}</td>
-                        <td className="p-2.5 font-bold text-[#C9A24B]">Room {inv.room_number}</td>
+                        <td className="p-2.5 font-bold text-[#C9A24B]">
+                          <div>{String(inv.room_number || '').includes(',') ? `Rooms ${inv.room_number}` : `Room ${inv.room_number}`}</div>
+                          {inv.is_day_use && (
+                            <span className="text-[9px] text-[#A87B24] font-mono block">
+                              ⚡ Fresh-Up ({inv.group_size || 1} Pax)
+                            </span>
+                          )}
+                        </td>
                         <td className="p-2.5">{inv.guest_name}</td>
                         <td className="p-2.5">{inv.nights} N</td>
                         <td className="p-2.5 uppercase font-bold text-[10px]">{inv.payment_mode}</td>

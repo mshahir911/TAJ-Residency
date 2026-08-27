@@ -1276,11 +1276,17 @@ export function usePMSStore() {
     const invoiceId = `INV-${new Date().getFullYear()}-${room.room_number}-${Math.floor(1000 + Math.random() * 9000)}`;
     const billerStaff = billed_by_staff_name || currentStaff?.name || 'Receptionist';
 
+    const allRoomNumbers = (booking.linked_room_numbers && booking.linked_room_numbers.length > 0)
+      ? booking.linked_room_numbers.join(', ')
+      : room.room_number;
+
     const newInvoice = {
       id: invoiceId,
       property_id: state.activePropertyId,
       booking_id: booking.id,
-      room_number: room.room_number,
+      room_number: allRoomNumbers,
+      assigned_rooms_count: booking.linked_room_numbers?.length || 1,
+      linked_room_numbers: booking.linked_room_numbers || [room.room_number],
       guest_name: guest?.name || 'Guest',
       guest_phone: guest?.phone || '',
       nights,

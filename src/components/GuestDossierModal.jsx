@@ -210,8 +210,15 @@ export default function GuestDossierModal({
                               STAY #{String(guestBookings.length - index).padStart(2, '0')}
                             </span>
                             <span className="font-bold text-white text-sm">
-                              Room {roomObj.room_number} &bull; {b.ac_or_non_ac || 'AC'}
+                              {b.linked_room_numbers?.length > 1
+                                ? `Rooms ${b.linked_room_numbers.join(', ')} (${b.linked_room_numbers.length} Rooms)`
+                                : `Room ${roomObj.room_number}`} &bull; {b.ac_or_non_ac || 'AC'}
                             </span>
+                            {b.booking_type === 'day_use' && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-mono font-bold">
+                                ⚡ Fresh-Up ({b.group_size || 1} Pax)
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-2">

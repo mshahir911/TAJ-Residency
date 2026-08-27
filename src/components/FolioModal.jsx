@@ -148,14 +148,15 @@ export default function FolioModal({
   const handleShareWhatsApp = () => {
     const hotelName = property?.name || 'Taj Residency';
     const guestName = guest?.name || 'Valued Guest';
-    const roomNum = room?.room_number || 'Room';
+    const isMultiRoom = Boolean(booking?.linked_room_numbers?.length > 1);
+    const roomDisplay = isMultiRoom ? `Rooms ${booking.linked_room_numbers.join(', ')} (${booking.linked_room_numbers.length} Rooms)` : `Room ${room?.room_number || 'Room'}`;
 
     const discountLine = calculatedDiscount > 0
       ? `🏷️ *Discount / Concession:* -₹${calculatedDiscount.toLocaleString('en-IN')}${discountReason ? ` (${discountReason})` : ''}\n`
       : '';
 
     const msg = `🏛️ *${hotelName.toUpperCase()} — TAX INVOICE & RECEIPT*
-_Room ${roomNum} (${booking.ac_or_non_ac})_
+_${roomDisplay} (${booking.ac_or_non_ac})_${isDayUse ? ` • *Team Fresh-Up (${booking.group_size || 1} Pax)*` : ''}
 
 Dear *${guestName}*,
 Thank you for staying at Taj Residency, Kozhikode. Here is your final billing summary:
@@ -228,8 +229,10 @@ _We look forward to welcoming you back to Calicut!_`;
               <span>Back</span>
             </button>
 
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass font-display font-bold text-base sm:text-lg shadow-md shadow-brass/20 shrink-0">
-              {room.room_number}
+            <div className="px-2.5 py-1.5 rounded-xl bg-ink border border-brass flex items-center justify-center text-brass font-display font-bold text-xs sm:text-sm shadow-md shadow-brass/20 shrink-0 whitespace-nowrap">
+              {booking?.linked_room_numbers?.length > 1
+                ? `Rooms ${booking.linked_room_numbers.join(', ')}`
+                : room.room_number}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -271,7 +274,7 @@ _We look forward to welcoming you back to Calicut!_`;
               <div className="flex items-center justify-between text-xs">
                 <span className="text-amber-400 font-bold flex items-center gap-1.5 uppercase">
                   <Zap className="w-3.5 h-3.5 fill-amber-400" />
-                  <span>Fresh-Up Stay: {booking.duration_hours || 2} Hours ({booking.group_size || 1} Pax)</span>
+                  <span>Fresh-Up Stay: {booking.duration_hours || 2} Hours ({booking.group_size || 1} Pax{booking?.linked_room_numbers?.length > 1 ? ` • ${booking.linked_room_numbers.length} Rooms: ${booking.linked_room_numbers.join(', ')}` : ''})</span>
                 </span>
                 <span className="text-slate-400 text-[11px]">
                   ₹{rateApplied} total • {booking.ac_or_non_ac}
