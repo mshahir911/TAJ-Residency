@@ -39,6 +39,7 @@ export default function KeycardRoom({
   const isDirty = room.status === 'dirty';
   const isCleaning = room.status === 'cleaning';
   const isClean = room.status === 'clean';
+  const isDayUse = booking?.booking_type === 'day_use' || Boolean(room.is_day_use) || Boolean(room.day_use_end_time);
 
   let statusClass = 'status-vacant';
   let statusColor = 'text-signal-green';
@@ -191,7 +192,6 @@ export default function KeycardRoom({
 
               {/* Checkout Due Deadline Indicator (Fresh-Up or Overnight) */}
               {(() => {
-                const isDayUse = booking?.booking_type === 'day_use' || room.is_day_use || Boolean(room.day_use_end_time);
                 if (isDayUse) {
                   const checkOutTime = new Date(booking?.check_out_date || room.day_use_end_time || Date.now());
                   const isOverdue = Date.now() > checkOutTime.getTime();

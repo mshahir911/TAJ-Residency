@@ -67,6 +67,22 @@ class RootErrorBoundary extends React.Component {
             }}>
               A display or state refresh is needed to synchronize your front desk session.
             </p>
+            {this.state.error?.message && (
+              <div style={{
+                textAlign: 'left',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#FCA5A5',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                marginBottom: '16px',
+                wordBreak: 'break-all'
+              }}>
+                {this.state.error.message}
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <button
                 type="button"
