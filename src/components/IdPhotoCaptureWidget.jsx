@@ -148,7 +148,7 @@ export default function IdPhotoCaptureWidget({
     startCameraStream(nextFacing);
   };
 
-  // Capture snapshot directly from the video feed onto a canvas
+  // Capture snapshot directly from the video feed onto a canvas, cropped to the center framing box
   const handleSnapPhoto = () => {
     if (!videoRef.current) return;
     try {
@@ -156,13 +156,45 @@ export default function IdPhotoCaptureWidget({
       const width = video.videoWidth || 1280;
       const height = video.videoHeight || 720;
 
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0, width, height);
+      // Crop strictly to the center card bounding box as framed by the viewfinder
+      // Viewfinder is aspect-[85.6/53.98] (~1.586) centered in the viewport
+      let sWidth = width;
+      let sHeight = height;
+      let sx = 0;
+      let sy = 0;
 
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+      if (height > width) {
+        // Vertical portrait feed (smartphones)
+        // Card viewfinder spans ~94% width, with height = width / 1.586
+        sWidth = Math.round(width * 0.94);
+        sHeight = Math.round(sWidth / 1.586);
+        sx = Math.round((width - sWidth) / 2);
+        sy = Math.round((height - sHeight) / 2);
+      } else {
+        // Horizontal landscape feed (desktop webcams)
+        sHeight = Math.round(height * 0.82);
+        sWidth = Math.round(sHeight * 1.586);
+        if (sWidth > width) {
+          sWidth = Math.round(width * 0.94);
+          sHeight = Math.round(sWidth / 1.586);
+        }
+        sx = Math.round((width - sWidth) / 2);
+        sy = Math.round((height - sHeight) / 2);
+      }
+
+      sWidth = Math.max(100, Math.min(sWidth, width));
+      sHeight = Math.max(100, Math.min(sHeight, height));
+      sx = Math.max(0, Math.min(sx, width - sWidth));
+      sy = Math.max(0, Math.min(sy, height - sHeight));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = sWidth;
+      canvas.height = sHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, sWidth, sHeight);
+
+      // Lightweight compression (~80KB) for instantaneous cloud sync
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
 
       if (activeSide === 'front') {
         if (typeof onChangeFront === 'function') onChangeFront(dataUrl);
@@ -438,7 +470,7 @@ export default function IdPhotoCaptureWidget({
               <img
                 src={currentPhoto}
                 alt={`${idType} ${activeSide}`}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain bg-black"
               />
               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                 {onViewFullscreen && (

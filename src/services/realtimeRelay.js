@@ -69,10 +69,23 @@ class RealtimeRelayBus {
       this.eventSource.onmessage = (event) => {
         try {
           const envelope = JSON.parse(event.data);
-          if (envelope && envelope.event === 'message' && envelope.message) {
-            const payload = JSON.parse(envelope.message);
-            if (payload && payload.senderId !== SESSION_DEVICE_ID) {
-              this.handleIncomingPayload(payload, 'sse_cloud');
+          if (envelope && envelope.event === 'message') {
+            if (envelope.attachment && envelope.attachment.url) {
+              fetch(envelope.attachment.url)
+                .then(r => r.json())
+                .then(payload => {
+                  if (payload && payload.senderId !== SESSION_DEVICE_ID) {
+                    this.handleIncomingPayload(payload, 'sse_attachment');
+                  }
+                })
+                .catch(err => console.warn('[RealtimeBus] Attachment parse error:', err));
+            } else if (envelope.message) {
+              try {
+                const payload = JSON.parse(envelope.message);
+                if (payload && payload.senderId !== SESSION_DEVICE_ID) {
+                  this.handleIncomingPayload(payload, 'sse_cloud');
+                }
+              } catch (e) {}
             }
           }
         } catch (e) {
@@ -134,7 +147,32 @@ class RealtimeRelayBus {
     } catch (e) {}
 
     // 2. Send via fast HTTP POST to ntfy.sh SSE relay (< 150ms for cross-browser & mobile)
-    const jsonStr = JSON.stringify(payload);
+    let relayPayload = payload;
+    if (mutation.type === 'SELF_CHECKIN_SUBMITTED' && mutation.selfCheckin) {
+      const sc = mutation.selfCheckin;
+      relayPayload = {
+        ...payload,
+        selfCheckin: {
+          id: sc.id,
+          property_id: sc.property_id,
+          guest_name: sc.guest_name,
+          phone: sc.phone,
+          address: sc.address,
+          id_proof_type: sc.id_proof_type,
+          id_proof_number: sc.id_proof_number,
+          group_size: sc.group_size,
+          booking_type: sc.booking_type,
+          duration_hours: sc.duration_hours,
+          eta: sc.eta,
+          submitted_at: sc.submitted_at,
+          status: sc.status,
+          id_proof_photo_url: sc.id_proof_photo_url?.startsWith('http') ? sc.id_proof_photo_url : '',
+          id_proof_back_photo_url: sc.id_proof_back_photo_url?.startsWith('http') ? sc.id_proof_back_photo_url : ''
+        }
+      };
+    }
+
+    const jsonStr = JSON.stringify(relayPayload);
     fetch(PUBLISH_URL, {
       method: 'POST',
       headers: {

@@ -2025,6 +2025,43 @@ textarea:focus-visible {
   color: var(--text-main);
 }
 
+/* Public Self-Checkin Mobile Portal — Force High-Contrast Dark Luxury Styling */
+.public-self-checkin-view,
+[data-theme="light"] .public-self-checkin-view {
+  background-color: #0A0D12 !important;
+  color: #E2E8F0 !important;
+}
+.public-self-checkin-view h1,
+.public-self-checkin-view h2,
+.public-self-checkin-view h3,
+.public-self-checkin-view .text-white,
+[data-theme="light"] .public-self-checkin-view .text-white {
+  color: #FFFFFF !important;
+}
+.public-self-checkin-view .text-slate-200,
+[data-theme="light"] .public-self-checkin-view .text-slate-200 {
+  color: #E2E8F0 !important;
+}
+.public-self-checkin-view .text-slate-300,
+[data-theme="light"] .public-self-checkin-view .text-slate-300 {
+  color: #CBD5E1 !important;
+}
+.public-self-checkin-view .text-slate-400,
+[data-theme="light"] .public-self-checkin-view .text-slate-400 {
+  color: #94A3B8 !important;
+}
+.public-self-checkin-view .text-slate-500,
+[data-theme="light"] .public-self-checkin-view .text-slate-500 {
+  color: #64748B !important;
+}
+.public-self-checkin-view input,
+.public-self-checkin-view select,
+[data-theme="light"] .public-self-checkin-view input,
+[data-theme="light"] .public-self-checkin-view select {
+  background-color: #0A0D12 !important;
+  color: #FFFFFF !important;
+}
+
 [data-theme="light"] .text-white {
   color: #0F172A;
 }

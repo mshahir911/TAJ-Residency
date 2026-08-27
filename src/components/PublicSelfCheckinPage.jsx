@@ -167,26 +167,44 @@ export default function PublicSelfCheckinPage({
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0D12] text-slate-200 font-sans flex flex-col selection:bg-[#C9A24B] selection:text-black">
+    <div
+      className="public-self-checkin-view min-h-screen font-sans flex flex-col selection:bg-[#C9A24B] selection:text-black"
+      style={{ backgroundColor: '#0A0D12', color: '#E2E8F0' }}
+    >
       {/* Top Luxury Banner */}
-      <header className="bg-[#11161D] border-b border-[#C9A24B]/30 px-4 py-3 sticky top-0 z-30 shadow-lg">
+      <header
+        className="border-b px-4 py-3 sticky top-0 z-30 shadow-lg"
+        style={{ backgroundColor: '#11161D', borderColor: 'rgba(201, 162, 75, 0.35)' }}
+      >
         <div className="max-w-xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#C9A24B]/15 border border-[#C9A24B] flex items-center justify-center text-[#C9A24B] font-serif font-bold text-sm">
+            <div
+              className="w-8 h-8 rounded-lg border flex items-center justify-center font-serif font-bold text-sm"
+              style={{ backgroundColor: 'rgba(201, 162, 75, 0.15)', borderColor: '#C9A24B', color: '#C9A24B' }}
+            >
               TR
             </div>
             <div>
-              <h1 className="font-serif font-bold text-white text-sm tracking-wide uppercase">
+              <h1
+                className="font-serif font-bold text-sm tracking-wide uppercase"
+                style={{ color: '#FFFFFF' }}
+              >
                 {hotelName}
               </h1>
-              <p className="text-[10px] text-slate-400 font-mono truncate max-w-[200px] sm:max-w-none">
+              <p
+                className="text-[10px] font-mono truncate max-w-[200px] sm:max-w-none"
+                style={{ color: '#94A3B8' }}
+              >
                 Express Digital Self Check-In
               </p>
             </div>
           </div>
 
           <div className="text-right">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[9px] font-bold inline-flex items-center gap-1">
+            <span
+              className="px-2.5 py-1 rounded-full font-mono text-[10px] font-bold inline-flex items-center gap-1.5 border"
+              style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.35)', color: '#34D399' }}
+            >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               <span>Fast Desk Pass</span>
             </span>
@@ -199,16 +217,28 @@ export default function PublicSelfCheckinPage({
         {stage === 'form' ? (
           <div className="space-y-5 animate-in fade-in duration-300">
             {/* Welcome Greeting */}
-            <div className="bg-[#141A23] p-4 rounded-2xl border border-[#C9A24B]/30 shadow-md">
+            <div
+              className="p-4 rounded-2xl border shadow-md"
+              style={{ backgroundColor: '#141A23', borderColor: 'rgba(201, 162, 75, 0.35)' }}
+            >
               <div className="flex items-start gap-3">
-                <div className="p-2 rounded-xl bg-[#C9A24B]/10 text-[#C9A24B] shrink-0 mt-0.5">
+                <div
+                  className="p-2 rounded-xl shrink-0 mt-0.5"
+                  style={{ backgroundColor: 'rgba(201, 162, 75, 0.15)', color: '#C9A24B' }}
+                >
                   <Sparkles className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-serif font-bold text-white text-base">
+                  <h2
+                    className="font-serif font-bold text-base"
+                    style={{ color: '#FFFFFF' }}
+                  >
                     Welcome to Taj Residency
                   </h2>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  <p
+                    className="text-xs mt-1 leading-relaxed"
+                    style={{ color: '#CBD5E1' }}
+                  >
                     Pre-fill your Government ID verification to skip reception paperwork and walk straight to your room keycard.
                   </p>
                 </div>
@@ -224,15 +254,24 @@ export default function PublicSelfCheckinPage({
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* 1. Guest Personal Details */}
-              <div className="bg-[#141A23] p-4 rounded-2xl border border-white/10 space-y-3 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#C9A24B] uppercase tracking-wider font-mono">
+              <div
+                className="p-4 rounded-2xl border space-y-3 shadow-sm"
+                style={{ backgroundColor: '#141A23', borderColor: 'rgba(255, 255, 255, 0.12)' }}
+              >
+                <div
+                  className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider font-mono"
+                  style={{ color: '#C9A24B' }}
+                >
                   <User className="w-3.5 h-3.5" />
                   <span>1. Guest Information</span>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10.5px] font-mono uppercase text-slate-400 block font-semibold">
-                    Full Name (As per Govt ID) <span className="text-[#C9A24B]">*</span>
+                  <label
+                    className="text-[10.5px] font-mono uppercase block font-semibold"
+                    style={{ color: '#CBD5E1' }}
+                  >
+                    Full Name (As per Govt ID) <span style={{ color: '#C9A24B' }}>*</span>
                   </label>
                   <input
                     type="text"
@@ -240,36 +279,45 @@ export default function PublicSelfCheckinPage({
                     placeholder="e.g. Dr. Vivek Krishna Menon"
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
-                    className="w-full bg-[#0A0D12] border border-white/15 focus:border-[#C9A24B] rounded-xl px-3 py-2 text-white text-sm outline-none transition-all placeholder:text-slate-600"
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none transition-all border"
+                    style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255, 255, 255, 0.2)', color: '#FFFFFF' }}
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10.5px] font-mono uppercase text-slate-400 block font-semibold">
-                      Mobile Phone Number <span className="text-[#C9A24B]">*</span>
+                    <label
+                      className="text-[10.5px] font-mono uppercase block font-semibold"
+                      style={{ color: '#CBD5E1' }}
+                    >
+                      Mobile Phone Number <span style={{ color: '#C9A24B' }}>*</span>
                     </label>
                     <div className="relative">
-                      <Phone className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                      <Phone className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                       <input
                         type="tel"
                         required
                         placeholder="+91 98470 12345"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full bg-[#0A0D12] border border-white/15 focus:border-[#C9A24B] rounded-xl pl-8 pr-3 py-2 text-white font-mono text-xs outline-none transition-all placeholder:text-slate-600"
+                        className="w-full rounded-xl pl-8 pr-3 py-2 font-mono text-xs outline-none transition-all border"
+                        style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255, 255, 255, 0.2)', color: '#FFFFFF' }}
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10.5px] font-mono uppercase text-slate-400 block font-semibold">
+                    <label
+                      className="text-[10.5px] font-mono uppercase block font-semibold"
+                      style={{ color: '#CBD5E1' }}
+                    >
                       Total Guests (Pax)
                     </label>
                     <select
                       value={groupSize}
                       onChange={(e) => setGroupSize(Number(e.target.value))}
-                      className="w-full bg-[#0A0D12] border border-white/15 focus:border-[#C9A24B] rounded-xl px-3 py-2 text-white text-xs outline-none transition-all"
+                      className="w-full rounded-xl px-3 py-2 text-xs outline-none transition-all border"
+                      style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255, 255, 255, 0.2)', color: '#FFFFFF' }}
                     >
                       <option value="1">1 Person (Solo Traveler)</option>
                       <option value="2">2 Persons (Couple / Twin)</option>
@@ -282,73 +330,84 @@ export default function PublicSelfCheckinPage({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10.5px] font-mono uppercase text-slate-400 block font-semibold">
+                  <label
+                    className="text-[10.5px] font-mono uppercase block font-semibold"
+                    style={{ color: '#CBD5E1' }}
+                  >
                     Permanent Address / City
                   </label>
                   <div className="relative">
-                    <MapPin className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                    <MapPin className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
                     <input
                       type="text"
                       placeholder="e.g. Bangalore, Karnataka / Cochin, Kerala"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      className="w-full bg-[#0A0D12] border border-white/15 focus:border-[#C9A24B] rounded-xl pl-8 pr-3 py-2 text-white text-xs outline-none transition-all placeholder:text-slate-600"
+                      className="w-full rounded-xl pl-8 pr-3 py-2 text-xs outline-none transition-all border"
+                      style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255, 255, 255, 0.2)', color: '#FFFFFF' }}
                     />
                   </div>
                 </div>
               </div>
 
               {/* 2. Stay Type (Overnight Stay vs Fresh-Up) */}
-              <div className="bg-[#141A23] p-4 rounded-2xl border border-white/10 space-y-3 shadow-sm">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#C9A24B] uppercase tracking-wider font-mono">
+              <div
+                className="p-4 rounded-2xl border space-y-3 shadow-sm"
+                style={{ backgroundColor: '#141A23', borderColor: 'rgba(255, 255, 255, 0.12)' }}
+              >
+                <div
+                  className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider font-mono"
+                  style={{ color: '#C9A24B' }}
+                >
                   <Clock className="w-3.5 h-3.5" />
                   <span>2. Stay Duration & Type</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2.5">
                   <button
                     type="button"
                     onClick={() => setBookingType('overnight')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      bookingType === 'overnight'
-                        ? 'bg-[#C9A24B]/15 border-[#C9A24B] text-white shadow-md'
-                        : 'bg-[#0A0D12] border-white/10 text-slate-400 hover:text-white'
-                    }`}
+                    className="p-3 rounded-xl border text-left transition-all cursor-pointer"
+                    style={{
+                      backgroundColor: bookingType === 'overnight' ? 'rgba(201, 162, 75, 0.15)' : '#0A0D12',
+                      borderColor: bookingType === 'overnight' ? '#C9A24B' : 'rgba(255,255,255,0.12)'
+                    }}
                   >
-                    <div className="font-bold text-xs">Overnight Stay</div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">12:00 PM Noon Basis</div>
+                    <div className="font-bold text-xs" style={{ color: '#FFFFFF' }}>Overnight Stay</div>
+                    <div className="text-[10.5px] mt-0.5" style={{ color: '#94A3B8' }}>12:00 PM Noon Basis</div>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setBookingType('day_use')}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      bookingType === 'day_use'
-                        ? 'bg-amber-400/15 border-amber-400 text-white shadow-md'
-                        : 'bg-[#0A0D12] border-white/10 text-slate-400 hover:text-white'
-                    }`}
+                    className="p-3 rounded-xl border text-left transition-all cursor-pointer"
+                    style={{
+                      backgroundColor: bookingType === 'day_use' ? 'rgba(245, 158, 11, 0.15)' : '#0A0D12',
+                      borderColor: bookingType === 'day_use' ? '#F59E0B' : 'rgba(255,255,255,0.12)'
+                    }}
                   >
-                    <div className="font-bold text-xs flex items-center gap-1 text-amber-300">
+                    <div className="font-bold text-xs flex items-center gap-1" style={{ color: '#FBBF24' }}>
                       <span>⚡ Fresh-Up / Day Use</span>
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">Short hours to freshen up</div>
+                    <div className="text-[10.5px] mt-0.5" style={{ color: '#94A3B8' }}>Short hours to freshen up</div>
                   </button>
                 </div>
 
                 {bookingType === 'day_use' && (
                   <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-                    <span className="text-xs text-slate-300">Fresh-Up Duration:</span>
+                    <span className="text-xs" style={{ color: '#CBD5E1' }}>Fresh-Up Duration:</span>
                     <div className="flex gap-1.5">
                       {[1, 2, 3, 4].map(h => (
                         <button
                           key={h}
                           type="button"
                           onClick={() => setDurationHours(h)}
-                          className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
-                            durationHours === h
-                              ? 'bg-amber-400 text-black'
-                              : 'bg-[#0A0D12] text-slate-400 border border-white/10'
-                          }`}
+                          className="px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer"
+                          style={{
+                            backgroundColor: durationHours === h ? '#F59E0B' : '#0A0D12',
+                            color: durationHours === h ? '#0B0F14' : '#CBD5E1',
+                            border: '1px solid rgba(255,255,255,0.15)'
+                          }}
                         >
                           {h}h
                         </button>
@@ -359,26 +418,33 @@ export default function PublicSelfCheckinPage({
               </div>
 
               {/* 3. Government ID Verification */}
-              <div className="bg-[#141A23] p-4 rounded-2xl border border-white/10 space-y-3 shadow-sm">
-                <div className="flex items-center justify-between text-xs font-bold text-[#C9A24B] uppercase tracking-wider font-mono">
-                  <div className="flex items-center gap-2">
+              <div
+                className="p-4 rounded-2xl border space-y-3 shadow-sm"
+                style={{ backgroundColor: '#141A23', borderColor: 'rgba(255, 255, 255, 0.12)' }}
+              >
+                <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider font-mono">
+                  <div className="flex items-center gap-2" style={{ color: '#C9A24B' }}>
                     <Shield className="w-3.5 h-3.5" />
                     <span>3. Identity Verification</span>
                   </div>
-                  <span className="text-[9px] text-slate-500 font-normal normal-case">
+                  <span className="text-[9px] font-normal normal-case" style={{ color: '#94A3B8' }}>
                     Sarais Act Compliant
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10.5px] font-mono uppercase text-slate-400 block font-semibold">
-                      ID Document Type <span className="text-[#C9A24B]">*</span>
+                    <label
+                      className="text-[10.5px] font-mono uppercase block font-semibold"
+                      style={{ color: '#CBD5E1' }}
+                    >
+                      ID Document Type <span style={{ color: '#C9A24B' }}>*</span>
                     </label>
                     <select
                       value={idType}
                       onChange={(e) => setIdType(e.target.value)}
-                      className="w-full bg-[#0A0D12] border border-white/15 focus:border-[#C9A24B] rounded-xl px-3 py-2 text-white text-xs outline-none transition-all"
+                      className="w-full rounded-xl px-3 py-2 text-xs outline-none transition-all border"
+                      style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255, 255, 255, 0.2)', color: '#FFFFFF' }}
                     >
                       <option value="Aadhaar Card">Aadhaar Card</option>
                       <option value="Passport">Passport</option>
@@ -388,8 +454,11 @@ export default function PublicSelfCheckinPage({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10.5px] font-mono uppercase text-slate-400 block font-semibold">
-                      ID Document Number <span className="text-[#C9A24B]">*</span>
+                    <label
+                      className="text-[10.5px] font-mono uppercase block font-semibold"
+                      style={{ color: '#CBD5E1' }}
+                    >
+                      ID Document Number <span style={{ color: '#C9A24B' }}>*</span>
                     </label>
                     <input
                       type="text"
@@ -397,7 +466,8 @@ export default function PublicSelfCheckinPage({
                       placeholder="e.g. 1234 5678 9012"
                       value={idNumber}
                       onChange={(e) => setIdNumber(e.target.value)}
-                      className="w-full bg-[#0A0D12] border border-white/15 focus:border-[#C9A24B] rounded-xl px-3 py-2 text-white font-mono text-xs outline-none transition-all uppercase placeholder:text-slate-600"
+                      className="w-full rounded-xl px-3 py-2 font-mono text-xs outline-none transition-all uppercase border"
+                      style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255, 255, 255, 0.2)', color: '#FFFFFF' }}
                     />
                   </div>
                 </div>
@@ -441,72 +511,124 @@ export default function PublicSelfCheckinPage({
           <div className="space-y-5 animate-in fade-in duration-300 flex-1 flex flex-col justify-center">
             {liveCheckinRecord?.status === 'approved' ? (
               /* Approved: VIP Keycard Screen */
-              <div className="bg-[#141A23] p-6 rounded-3xl border-2 border-emerald-500/50 shadow-2xl text-center space-y-5">
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto">
+              <div
+                className="p-6 rounded-3xl border-2 shadow-2xl text-center space-y-5"
+                style={{ backgroundColor: '#141A23', borderColor: 'rgba(16, 185, 129, 0.5)' }}
+              >
+                <div
+                  className="w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto"
+                  style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', borderColor: 'rgba(16, 185, 129, 0.4)', color: '#34D399' }}
+                >
                   <Key className="w-8 h-8" />
                 </div>
 
                 <div>
-                  <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold inline-block">
+                  <span
+                    className="px-3 py-1 rounded-full text-xs font-mono font-bold inline-block border"
+                    style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', borderColor: 'rgba(16, 185, 129, 0.35)', color: '#34D399' }}
+                  >
                     ✓ CHECK-IN APPROVED
                   </span>
-                  <h2 className="font-serif font-bold text-white text-2xl mt-3">
-                    Welcome, {liveCheckinRecord?.guest_name}!
+                  <h2
+                    className="font-serif font-bold text-2xl mt-3"
+                    style={{ color: '#FFFFFF' }}
+                  >
+                    Welcome, {liveCheckinRecord?.guest_name || guestName}!
                   </h2>
-                  <p className="text-xs text-slate-300 mt-1">
+                  <p
+                    className="text-xs mt-1"
+                    style={{ color: '#CBD5E1' }}
+                  >
                     Your registration has been verified by the reception desk.
                   </p>
                 </div>
 
-                <div className="bg-[#0A0D12] p-5 rounded-2xl border border-emerald-500/30 space-y-3">
-                  <span className="text-[11px] font-mono uppercase text-slate-400 tracking-wider">
+                <div
+                  className="p-5 rounded-2xl border space-y-3"
+                  style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(16, 185, 129, 0.35)' }}
+                >
+                  <span
+                    className="text-[11px] font-mono uppercase tracking-wider block font-semibold"
+                    style={{ color: '#94A3B8' }}
+                  >
                     Your Assigned Accommodation
                   </span>
-                  <div className="text-4xl font-serif font-extrabold text-[#C9A24B] tracking-tight">
+                  <div
+                    className="text-4xl font-serif font-extrabold tracking-tight"
+                    style={{ color: '#C9A24B' }}
+                  >
                     Room {liveCheckinRecord?.room_number || '202'}
                   </div>
-                  <div className="text-xs text-slate-300 flex items-center justify-center gap-2">
+                  <div
+                    className="text-xs flex items-center justify-center gap-2 font-medium"
+                    style={{ color: '#CBD5E1' }}
+                  >
                     <Wifi className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Free High-Speed WiFi Activated</span>
                   </div>
                 </div>
 
-                <div className="p-3.5 bg-white/5 rounded-xl border border-white/10 text-xs text-slate-300 leading-relaxed">
+                <div
+                  className="p-3.5 rounded-xl border text-xs leading-relaxed"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.1)', color: '#E2E8F0' }}
+                >
                   🏛️ Please show this screen to the reception desk staff to collect your physical electronic room keycard.
                 </div>
 
                 <button
                   type="button"
                   onClick={handleResetNewCheckin}
-                  className="w-full py-2.5 rounded-xl bg-panel hover:bg-ink text-slate-400 hover:text-white border border-white/10 text-xs font-mono font-semibold transition-all"
+                  className="w-full py-2.5 rounded-xl border text-xs font-mono font-semibold transition-all cursor-pointer"
+                  style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255,255,255,0.15)', color: '#CBD5E1' }}
                 >
                   Start Another Guest Registration
                 </button>
               </div>
             ) : liveCheckinRecord?.status === 'needs_info' || liveCheckinRecord?.status === 'rejected' ? (
               /* Needs Info or Rejected Screen */
-              <div className="bg-[#141A23] p-6 rounded-3xl border-2 border-amber-500/50 shadow-2xl text-center space-y-5">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mx-auto">
+              <div
+                className="p-6 rounded-3xl border-2 shadow-2xl text-center space-y-5"
+                style={{ backgroundColor: '#141A23', borderColor: 'rgba(245, 158, 11, 0.5)' }}
+              >
+                <div
+                  className="w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto"
+                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)', borderColor: 'rgba(245, 158, 11, 0.4)', color: '#F59E0B' }}
+                >
                   <AlertTriangle className="w-8 h-8" />
                 </div>
 
                 <div>
-                  <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold inline-block">
+                  <span
+                    className="px-3 py-1 rounded-full text-xs font-mono font-bold inline-block border"
+                    style={{ backgroundColor: 'rgba(245, 158, 11, 0.2)', borderColor: 'rgba(245, 158, 11, 0.35)', color: '#FBBF24' }}
+                  >
                     {liveCheckinRecord?.status === 'rejected' ? 'REVISE REGISTRATION' : 'ATTENTION NEEDED'}
                   </span>
-                  <h2 className="font-serif font-bold text-white text-xl mt-3">
+                  <h2
+                    className="font-serif font-bold text-xl mt-3"
+                    style={{ color: '#FFFFFF' }}
+                  >
                     Front Desk Note
                   </h2>
-                  <p className="text-xs text-slate-300 mt-1">
+                  <p
+                    className="text-xs mt-1"
+                    style={{ color: '#CBD5E1' }}
+                  >
                     The receptionist requested an update before confirming your room key.
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-[#0A0D12] border border-amber-500/30 text-xs text-amber-200 leading-relaxed text-left space-y-1">
-                  <span className="text-[10px] uppercase font-mono font-bold text-amber-400/80 block">
+                <div
+                  className="p-4 rounded-2xl border text-xs leading-relaxed text-left space-y-1"
+                  style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#FDE68A' }}
+                >
+                  <span
+                    className="text-[10px] uppercase font-mono font-bold block"
+                    style={{ color: '#F59E0B' }}
+                  >
                     Message from Reception:
                   </span>
-                  <p className="italic">
+                  <p className="italic font-medium">
                     "{liveCheckinRecord?.rejection_reason || 'Please provide your physical ID document at the counter for manual verification.'}"
                   </p>
                 </div>
@@ -515,7 +637,7 @@ export default function PublicSelfCheckinPage({
                   <button
                     type="button"
                     onClick={handleEditSubmission}
-                    className="w-full py-3 rounded-xl bg-[#C9A24B] text-black font-bold text-xs hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#C9A24B]/20 flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-xl bg-[#C9A24B] text-black font-bold text-xs hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-[#C9A24B]/20 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>Update ID Photo / Details</span>
                   </button>
@@ -523,7 +645,8 @@ export default function PublicSelfCheckinPage({
                   <button
                     type="button"
                     onClick={handleResetNewCheckin}
-                    className="w-full py-2.5 rounded-xl bg-transparent text-slate-400 hover:text-white text-xs font-mono"
+                    className="w-full py-2.5 rounded-xl bg-transparent text-xs font-mono cursor-pointer"
+                    style={{ color: '#94A3B8' }}
                   >
                     Cancel & Start New
                   </button>
@@ -531,45 +654,69 @@ export default function PublicSelfCheckinPage({
               </div>
             ) : (
               /* Pending Confirmation State */
-              <div className="bg-[#141A23] p-6 rounded-3xl border border-[#C9A24B]/40 shadow-2xl text-center space-y-5">
+              <div
+                className="p-6 rounded-3xl border shadow-2xl text-center space-y-5"
+                style={{ backgroundColor: '#141A23', borderColor: 'rgba(201, 162, 75, 0.45)' }}
+              >
                 <div className="relative w-16 h-16 mx-auto flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full bg-[#C9A24B]/20 animate-ping opacity-75"></div>
-                  <div className="w-16 h-16 rounded-2xl bg-[#C9A24B]/20 border border-[#C9A24B]/40 text-[#C9A24B] flex items-center justify-center relative">
+                  <div
+                    className="absolute inset-0 rounded-full animate-ping opacity-75"
+                    style={{ backgroundColor: 'rgba(201, 162, 75, 0.25)' }}
+                  ></div>
+                  <div
+                    className="w-16 h-16 rounded-2xl border flex items-center justify-center relative"
+                    style={{ backgroundColor: 'rgba(201, 162, 75, 0.2)', borderColor: 'rgba(201, 162, 75, 0.4)', color: '#C9A24B' }}
+                  >
                     <Clock className="w-8 h-8 animate-spin" style={{ animationDuration: '6s' }} />
                   </div>
                 </div>
 
                 <div>
-                  <span className="px-3 py-1 rounded-full bg-[#C9A24B]/20 text-[#C9A24B] border border-[#C9A24B]/30 text-xs font-mono font-bold inline-block">
+                  <span
+                    className="px-3 py-1 rounded-full text-xs font-mono font-bold inline-block border"
+                    style={{ backgroundColor: 'rgba(201, 162, 75, 0.2)', borderColor: 'rgba(201, 162, 75, 0.35)', color: '#C9A24B' }}
+                  >
                     VERIFICATION IN PROGRESS
                   </span>
-                  <h2 className="font-serif font-bold text-white text-xl mt-3">
+                  <h2
+                    className="font-serif font-bold text-2xl mt-3"
+                    style={{ color: '#FFFFFF' }}
+                  >
                     Registration Submitted
                   </h2>
-                  <p className="text-xs text-slate-300 mt-1 max-w-sm mx-auto leading-relaxed">
-                    Thank you, <strong className="text-white">{liveCheckinRecord?.guest_name || guestName}</strong>! Reception has received your details and is verifying your Government ID.
+                  <p
+                    className="text-xs mt-1.5 max-w-sm mx-auto leading-relaxed"
+                    style={{ color: '#CBD5E1' }}
+                  >
+                    Thank you, <strong style={{ color: '#FFFFFF' }}>{liveCheckinRecord?.guest_name || guestName}</strong>! Reception has received your details and is verifying your Government ID.
                   </p>
                 </div>
 
-                <div className="bg-[#0A0D12] p-4 rounded-2xl border border-white/10 text-left text-xs space-y-2 font-mono">
+                <div
+                  className="p-4 rounded-2xl border text-left text-xs space-y-2.5 font-mono"
+                  style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(255, 255, 255, 0.12)' }}
+                >
                   <div className="flex justify-between border-b border-white/10 pb-2">
-                    <span className="text-slate-500">Queue Reference:</span>
-                    <span className="font-bold text-[#C9A24B]">{liveCheckinRecord?.id || activeCheckinId}</span>
+                    <span style={{ color: '#94A3B8' }}>Queue Reference:</span>
+                    <span className="font-bold" style={{ color: '#C9A24B' }}>{liveCheckinRecord?.id || activeCheckinId}</span>
                   </div>
                   <div className="flex justify-between border-b border-white/10 pb-2">
-                    <span className="text-slate-500">Document:</span>
-                    <span className="text-white">{idType} ({idNumber})</span>
+                    <span style={{ color: '#94A3B8' }}>Document:</span>
+                    <span className="font-semibold" style={{ color: '#FFFFFF' }}>{idType} ({idNumber})</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Status:</span>
-                    <span className="text-amber-400 font-semibold flex items-center gap-1">
+                    <span style={{ color: '#94A3B8' }}>Status:</span>
+                    <span className="font-semibold flex items-center gap-1.5" style={{ color: '#F59E0B' }}>
                       <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
                       <span>Awaiting Front Desk Approval</span>
                     </span>
                   </div>
                 </div>
 
-                <div className="p-3 bg-white/5 rounded-xl border border-white/5 text-[11px] text-slate-400">
+                <div
+                  className="p-3 rounded-xl border text-[11px]"
+                  style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: '#CBD5E1' }}
+                >
                   ⚡ This screen updates automatically as soon as the receptionist assigns your room.
                 </div>
 
@@ -577,15 +724,17 @@ export default function PublicSelfCheckinPage({
                   <button
                     type="button"
                     onClick={handleEditSubmission}
-                    className="text-xs font-mono text-slate-400 hover:text-white underline underline-offset-4"
+                    className="text-xs font-mono underline underline-offset-4 cursor-pointer"
+                    style={{ color: '#CBD5E1' }}
                   >
                     Edit Submitted Details
                   </button>
-                  <span className="text-slate-600">&bull;</span>
+                  <span style={{ color: '#64748B' }}>&bull;</span>
                   <button
                     type="button"
                     onClick={handleResetNewCheckin}
-                    className="text-xs font-mono text-rose-400/80 hover:text-rose-400"
+                    className="text-xs font-mono cursor-pointer"
+                    style={{ color: '#F87171' }}
                   >
                     Cancel
                   </button>
@@ -600,7 +749,8 @@ export default function PublicSelfCheckinPage({
           <button
             type="button"
             onClick={onNavigateToStaffLogin}
-            className="text-[11px] text-slate-500 hover:text-slate-300 font-mono transition-colors cursor-pointer"
+            className="text-[11px] font-mono transition-colors cursor-pointer"
+            style={{ color: '#94A3B8' }}
           >
             Hotel Staff? Access Reception Desk Terminal &rarr;
           </button>

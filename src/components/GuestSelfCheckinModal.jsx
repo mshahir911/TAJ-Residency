@@ -352,7 +352,7 @@ export default function GuestSelfCheckinModal({
                                   <img
                                     src={item.id_proof_photo_url}
                                     alt="ID Front"
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    className="w-full h-full object-contain bg-black group-hover:scale-105 transition-transform"
                                   />
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                                     <Eye className="w-3.5 h-3.5 text-white" />
@@ -374,7 +374,7 @@ export default function GuestSelfCheckinModal({
                                   <img
                                     src={item.id_proof_back_photo_url}
                                     alt="ID Back"
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    className="w-full h-full object-contain bg-black group-hover:scale-105 transition-transform"
                                   />
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                                     <Eye className="w-3.5 h-3.5 text-white" />

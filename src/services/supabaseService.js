@@ -342,6 +342,26 @@ export async function fetchInitialDataset(propertyId = 'taj-residency-calicut') 
     if (guestsRes.status === 'fulfilled' && guestsRes.value?.data?.length) {
       result.guests = guestsRes.value.data;
       result.hasData = true;
+
+      // Extract pending self-checkins preserved in guests table notes
+      const pendingCheckins = [];
+      guestsRes.value.data.forEach(g => {
+        if (g.notes && typeof g.notes === 'string' && g.notes.startsWith('SELF_CHECKIN_PENDING:')) {
+          try {
+            const parsed = JSON.parse(g.notes.replace('SELF_CHECKIN_PENDING:', ''));
+            if (parsed && parsed.id) {
+              pendingCheckins.push({
+                ...parsed,
+                id_proof_photo_url: g.id_proof_photo_url || parsed.id_proof_photo_url,
+                id_proof_back_photo_url: g.id_proof_back_photo_url || parsed.id_proof_back_photo_url
+              });
+            }
+          } catch (e) {}
+        }
+      });
+      if (pendingCheckins.length > 0) {
+        result.selfCheckins = pendingCheckins;
+      }
     }
 
     if (invoicesRes.status === 'fulfilled' && invoicesRes.value?.data?.length) {

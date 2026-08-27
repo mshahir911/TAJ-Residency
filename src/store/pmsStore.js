@@ -322,7 +322,29 @@ export function usePMSStore() {
         const nextGuests = exists
           ? prev.guests.map(g => (g.id === newRecord.id ? { ...g, ...newRecord } : g))
           : [newRecord, ...(prev.guests || [])];
-        return { ...prev, guests: nextGuests };
+
+        let nextSelfCheckins = prev.selfCheckins || [];
+        if (newRecord.notes && typeof newRecord.notes === 'string' && newRecord.notes.startsWith('SELF_CHECKIN_PENDING:')) {
+          try {
+            const parsed = JSON.parse(newRecord.notes.replace('SELF_CHECKIN_PENDING:', ''));
+            if (parsed && parsed.id) {
+              const checkinItem = {
+                ...parsed,
+                id_proof_photo_url: newRecord.id_proof_photo_url || parsed.id_proof_photo_url,
+                id_proof_back_photo_url: newRecord.id_proof_back_photo_url || parsed.id_proof_back_photo_url
+              };
+              nextSelfCheckins = [
+                checkinItem,
+                ...nextSelfCheckins.filter(s => s.id !== checkinItem.id)
+              ];
+            }
+          } catch (e) {}
+        } else if (newRecord.notes && typeof newRecord.notes === 'string' && newRecord.notes.startsWith('SELF_CHECKIN_APPROVED:')) {
+          const guestCheckinId = newRecord.id?.replace('gst-', '');
+          nextSelfCheckins = nextSelfCheckins.map(s => s.id === guestCheckinId ? { ...s, status: 'approved' } : s);
+        }
+
+        return { ...prev, guests: nextGuests, selfCheckins: nextSelfCheckins };
       }
 
       if (table === 'invoices' && newRecord) {
@@ -1566,7 +1588,35 @@ export function usePMSStore() {
       selfCheckin: newRecord
     });
 
-    // Try persisting to Supabase self_checkins table if configured
+    // Authoritative persistence to guests table in Supabase PostgreSQL (triggers postgres_changes on all staff phones)
+    saveGuestToSupabase({
+      id: 'gst-' + newRecord.id,
+      property_id: newRecord.property_id || state.activePropertyId || 'taj-residency-calicut',
+      name: newRecord.guest_name,
+      phone: newRecord.phone,
+      address: newRecord.address || '',
+      id_proof_type: newRecord.id_proof_type || 'Aadhaar Card',
+      id_proof_number: newRecord.id_proof_number || '',
+      id_proof_photo_url: newRecord.id_proof_photo_url || '',
+      id_proof_back_photo_url: newRecord.id_proof_back_photo_url || '',
+      notes: 'SELF_CHECKIN_PENDING:' + JSON.stringify({
+        id: newRecord.id,
+        property_id: newRecord.property_id,
+        guest_name: newRecord.guest_name,
+        phone: newRecord.phone,
+        address: newRecord.address,
+        id_proof_type: newRecord.id_proof_type,
+        id_proof_number: newRecord.id_proof_number,
+        group_size: newRecord.group_size,
+        booking_type: newRecord.booking_type,
+        duration_hours: newRecord.duration_hours,
+        eta: newRecord.eta,
+        submitted_at: newRecord.submitted_at,
+        status: newRecord.status
+      })
+    }).catch(err => console.warn('[PMS Store] Supabase pending guest save notice:', err));
+
+    // Also attempt write to self_checkins table if configured
     try {
       if (supabase && typeof supabase.from === 'function') {
         supabase.from('self_checkins').insert({
@@ -1664,6 +1714,13 @@ export function usePMSStore() {
       })
     }));
 
+    // Update guest note in Supabase to sync across devices
+    saveGuestToSupabase({
+      id: 'gst-' + checkinId,
+      property_id: state.activePropertyId,
+      notes: `SELF_CHECKIN_APPROVED:Room ${assignedRoom.room_number}`
+    }).catch(() => {});
+
     // Broadcast status update to guest's phone in real-time
     realtimeRelay.broadcastMutation({
       type: 'SELF_CHECKIN_STATUS_UPDATED',
@@ -1698,6 +1755,13 @@ export function usePMSStore() {
         return sc;
       })
     }));
+
+    // Update guest note in Supabase to sync across devices
+    saveGuestToSupabase({
+      id: 'gst-' + checkinId,
+      property_id: state.activePropertyId,
+      notes: `SELF_CHECKIN_REJECTED:${reason}`
+    }).catch(() => {});
 
     // Broadcast status update to guest's phone so screen reflects note
     realtimeRelay.broadcastMutation({
