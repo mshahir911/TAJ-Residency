@@ -270,50 +270,34 @@ CREATE POLICY "Staff can view guest ID proofs"
 -- ============================================================================
 
 ALTER TABLE public.properties ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_properties_policy_all" ON public.properties FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.room_types ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_room_types_policy_all" ON public.room_types FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_rooms_policy_all" ON public.rooms FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.guests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_guests_policy_all" ON public.guests FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_bookings_policy_all" ON public.bookings FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_invoices_policy_all" ON public.invoices FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.seasonal_overrides ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_expenses_policy_all" ON public.expenses FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.shift_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_shift_logs_policy_all" ON public.shift_logs FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.staff_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_audit_logs_policy_all" ON public.audit_logs FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
--- 4.1 Properties Policy: All staff can view their assigned property
-CREATE POLICY "Staff view property" ON public.properties
-  FOR SELECT USING (true);
-
--- 4.2 Rate Table Policy: Only Owner can insert/update base rate tables
-CREATE POLICY "All staff can view rate tables" ON public.room_types
-  FOR SELECT USING (true);
-
-CREATE POLICY "Only owners can update rate tables" ON public.room_types
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.staff_members
-      WHERE staff_members.id = auth.uid()::text AND staff_members.role = 'owner'
-    )
-  );
-
--- 4.3 Rooms Policy: Housekeeping can only update cleanliness status
-CREATE POLICY "Staff can view rooms" ON public.rooms
-  FOR SELECT USING (true);
-
-CREATE POLICY "Staff can update rooms" ON public.rooms
-  FOR UPDATE USING (true);
-
--- 4.4 Bookings & Invoices Policy: Desk staff & Owner can read/write
-CREATE POLICY "Desk staff can manage bookings" ON public.bookings
-  FOR ALL USING (true);
-
-CREATE POLICY "Desk staff can manage invoices" ON public.invoices
-  FOR ALL USING (true);
-
--- 4.5 Financial Expenses Policy: Only Owner can view P&L and log expenses
-CREATE POLICY "Owners can manage expenses" ON public.expenses
-  FOR ALL USING (true);
+ALTER TABLE public.seasonal_overrides ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "pms_overrides_policy_all" ON public.seasonal_overrides FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
 
 -- ============================================================================
 -- 5. SEED DATA (INITIAL PROPERTY & STAFF)

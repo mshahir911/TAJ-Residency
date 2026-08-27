@@ -138,11 +138,100 @@ export async function executeSupabaseMutation({ table, action = 'upsert', payloa
   }
 }
 
+// Payload sanitizers to ensure exact PostgreSQL schema compliance
+function sanitizeRoomPayload(room) {
+  if (!room) return null;
+  return {
+    id: room.id,
+    property_id: room.property_id || 'taj-residency-calicut',
+    room_number: String(room.room_number),
+    room_type_id: room.room_type_id || 'classic',
+    floor: Number(room.floor) || 2,
+    status: room.status || 'vacant',
+    current_booking_id: room.current_booking_id || null,
+    wifi_voucher_code: room.wifi_voucher_code || null,
+    housekeeper_assigned: room.housekeeper_assigned || null,
+    inspected_by: room.inspected_by || null,
+    last_guest_name: room.last_guest_name || null,
+    checked_out_at: room.checked_out_at || null
+  };
+}
+
+function sanitizeBookingPayload(booking) {
+  if (!booking) return null;
+  return {
+    id: booking.id,
+    property_id: booking.property_id || 'taj-residency-calicut',
+    room_id: booking.room_id,
+    guest_id: booking.guest_id,
+    status: booking.status || 'confirmed',
+    check_in_date: booking.check_in_date,
+    check_out_date: booking.check_out_date,
+    nights: Number(booking.nights) || 1,
+    rate_applied: Number(booking.rate_applied) || 1500,
+    ac_or_non_ac: booking.ac_or_non_ac || 'AC',
+    advance_paid: Number(booking.advance_paid) || 0,
+    payment_mode: booking.payment_mode || 'Cash',
+    created_by_staff_name: booking.created_by_staff_name || 'Reception Desk',
+    wifi_code: booking.wifi_code || null
+  };
+}
+
+function sanitizeGuestPayload(guest) {
+  if (!guest) return null;
+  return {
+    id: guest.id,
+    property_id: guest.property_id || 'taj-residency-calicut',
+    name: guest.name || 'Guest',
+    phone: guest.phone || '',
+    address: guest.address || 'Kozhikode, Kerala',
+    id_proof_type: guest.id_proof_type || 'Aadhaar Card',
+    id_proof_number: guest.id_proof_number || '',
+    id_proof_photo_url: guest.id_proof_photo_url || '',
+    id_proof_back_photo_url: guest.id_proof_back_photo_url || '',
+    id_verified_at: guest.id_verified_at || '',
+    id_verified_by_staff: guest.id_verified_by_staff || '',
+    notes: guest.notes || '',
+    total_stays: Number(guest.total_stays) || 1,
+    lifetime_spend: Number(guest.lifetime_spend) || 0
+  };
+}
+
+function sanitizeInvoicePayload(invoice) {
+  if (!invoice) return null;
+  return {
+    id: invoice.id,
+    property_id: invoice.property_id || 'taj-residency-calicut',
+    booking_id: invoice.booking_id,
+    room_number: String(invoice.room_number),
+    guest_name: invoice.guest_name || 'Guest',
+    guest_phone: invoice.guest_phone || '',
+    nights: Number(invoice.nights) || 1,
+    rate_applied: Number(invoice.rate_applied) || 1500,
+    ac_or_non_ac: invoice.ac_or_non_ac || 'AC',
+    gross_room_charge: Number(invoice.gross_room_charge) || 0,
+    discount_amount: Number(invoice.discount_amount) || 0,
+    discount_type: invoice.discount_type || 'flat',
+    discount_reason: invoice.discount_reason || '',
+    room_charge: Number(invoice.room_charge) || 0,
+    gst_rate: Number(invoice.gst_rate) || 0,
+    gst_amount: Number(invoice.gst_amount) || 0,
+    cgst_amount: Number(invoice.cgst_amount) || 0,
+    sgst_amount: Number(invoice.sgst_amount) || 0,
+    advance_paid: Number(invoice.advance_paid) || 0,
+    total: Number(invoice.total) || 0,
+    balance_settled: Number(invoice.balance_settled) || 0,
+    payment_mode: invoice.payment_mode || 'Cash',
+    billed_by_staff_name: invoice.billed_by_staff_name || 'Receptionist',
+    paid_at: invoice.paid_at || new Date().toISOString()
+  };
+}
+
 // Entity-Specific Helpers
-export const saveRoomToSupabase = (room) => executeSupabaseMutation({ table: 'rooms', action: 'upsert', payload: room });
-export const saveBookingToSupabase = (booking) => executeSupabaseMutation({ table: 'bookings', action: 'upsert', payload: booking });
-export const saveGuestToSupabase = (guest) => executeSupabaseMutation({ table: 'guests', action: 'upsert', payload: guest });
-export const saveInvoiceToSupabase = (invoice) => executeSupabaseMutation({ table: 'invoices', action: 'upsert', payload: invoice });
+export const saveRoomToSupabase = (room) => executeSupabaseMutation({ table: 'rooms', action: 'upsert', payload: sanitizeRoomPayload(room) });
+export const saveBookingToSupabase = (booking) => executeSupabaseMutation({ table: 'bookings', action: 'upsert', payload: sanitizeBookingPayload(booking) });
+export const saveGuestToSupabase = (guest) => executeSupabaseMutation({ table: 'guests', action: 'upsert', payload: sanitizeGuestPayload(guest) });
+export const saveInvoiceToSupabase = (invoice) => executeSupabaseMutation({ table: 'invoices', action: 'upsert', payload: sanitizeInvoicePayload(invoice) });
 export const saveExpenseToSupabase = (expense) => executeSupabaseMutation({ table: 'expenses', action: 'upsert', payload: expense });
 export const saveShiftLogToSupabase = (shiftLog) => executeSupabaseMutation({ table: 'shift_logs', action: 'upsert', payload: shiftLog });
 export const saveAuditLogToSupabase = (auditLog) => executeSupabaseMutation({ table: 'audit_logs', action: 'upsert', payload: auditLog });
