@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { usePMSStore } from './store/pmsStore';
 import { useIsDesktop } from './hooks/useMediaQuery';
 import TopHeader from './components/TopHeader';
@@ -201,11 +202,14 @@ export default function App() {
   // 1. If not authenticated, render the dedicated PIN keypad login gate
   if (!isAuthenticated) {
     return (
-      <LoginScreen
-        staffList={store.staffList}
-        onAuthenticateStaff={handleAuthenticateStaff}
-        property={store.property}
-      />
+      <>
+        <LoginScreen
+          staffList={store.staffList}
+          onAuthenticateStaff={handleAuthenticateStaff}
+          property={store.property}
+        />
+        <Analytics />
+      </>
     );
   }
 
@@ -594,6 +598,9 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
     </div>
   );
 }
