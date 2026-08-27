@@ -12,6 +12,7 @@ const getStoredConfig = () => {
   }
 };
 
+const stored = getStoredConfig();
 const DEFAULT_URL = 'https://cdhrpaunmcyknmrcvqdg.supabase.co';
 const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNkaHJwYXVubWN5a25tcmN2cWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxODgzMjgsImV4cCI6MjEwMTc2NDMyOH0.5tk15WpxjRgZqlXki1II_EENnm21Bb1FgT0evsOWMXk';
 
