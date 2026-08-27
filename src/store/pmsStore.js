@@ -37,7 +37,7 @@ import {
   testSupabaseConnection
 } from '../services/supabaseService.js';
 import { realtimeRelay } from '../services/realtimeRelay.js';
-import { isSupabaseConfigured } from '../lib/supabaseClient.js';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient.js';
 import { getBusinessDateIST } from '../utils/formatters.js';
 import { calculateCheckoutBilling } from '../utils/billing.js';
 
@@ -574,6 +574,35 @@ export function usePMSStore() {
             };
           }
           return prev;
+        }
+
+        case 'SELF_CHECKIN_SUBMITTED': {
+          const { selfCheckin } = mutation;
+          if (!selfCheckin) return prev;
+          const exists = (prev.selfCheckins || []).some(s => s.id === selfCheckin.id);
+          if (exists) return prev;
+          return {
+            ...prev,
+            selfCheckins: [selfCheckin, ...(prev.selfCheckins || [])]
+          };
+        }
+
+        case 'SELF_CHECKIN_STATUS_UPDATED': {
+          const { selfCheckinId, status, room_number, rejection_reason } = mutation;
+          return {
+            ...prev,
+            selfCheckins: (prev.selfCheckins || []).map(sc => {
+              if (sc.id === selfCheckinId) {
+                return {
+                  ...sc,
+                  status,
+                  room_number: room_number || sc.room_number,
+                  rejection_reason: rejection_reason || sc.rejection_reason
+                };
+              }
+              return sc;
+            })
+          };
         }
 
         default:
@@ -1525,24 +1554,167 @@ export function usePMSStore() {
       submitted_at: new Date().toISOString().replace('T', ' ').slice(0, 16),
       status: 'pending_reception_confirmation'
     };
+
     setState(prev => ({
       ...prev,
       selfCheckins: [newRecord, ...(prev.selfCheckins || [])]
     }));
+
+    // High-speed cross-device broadcast (< 200ms) to front desk reception terminal
+    realtimeRelay.broadcastMutation({
+      type: 'SELF_CHECKIN_SUBMITTED',
+      selfCheckin: newRecord
+    });
+
+    // Try persisting to Supabase self_checkins table if configured
+    try {
+      if (supabase && typeof supabase.from === 'function') {
+        supabase.from('self_checkins').insert({
+          id: newRecord.id,
+          property_id: newRecord.property_id,
+          guest_name: newRecord.guest_name,
+          phone: newRecord.phone,
+          address: newRecord.address,
+          id_proof_type: newRecord.id_proof_type,
+          id_proof_number: newRecord.id_proof_number,
+          id_proof_photo_url: newRecord.id_proof_photo_url,
+          status: newRecord.status
+        }).then(() => {}).catch(() => {});
+      }
+    } catch (e) {}
+
     return newRecord;
   };
 
-  const confirmSelfCheckin = (checkinId) => {
+  const approveSelfCheckin = (checkinId, options = {}) => {
+    const checkin = (state.selfCheckins || []).find(sc => sc.id === checkinId);
+    if (!checkin) return null;
+
+    const {
+      roomId,
+      rateApplied,
+      acOrNonAc = 'AC',
+      advancePaid = 0,
+      paymentMode = 'Cash',
+      bookingType = checkin.booking_type || 'overnight',
+      durationHours = checkin.duration_hours || 2,
+      groupSize = checkin.group_size || 1
+    } = options;
+
+    const targetRoomId = roomId || (scopedRooms.find(r => r.status === 'vacant' || r.status === 'ready')?.id);
+    const assignedRoom = (state.rooms || []).find(r => r.id === targetRoomId);
+    if (!assignedRoom) {
+      console.warn('[PMS Store] Cannot approve self-checkin: No vacant room selected or available.');
+      return null;
+    }
+
+    const checkInTime = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    let checkOutTime = '';
+    if (bookingType === 'day_use') {
+      const departure = new Date(Date.now() + (Number(durationHours) || 2) * 3600 * 1000);
+      checkOutTime = departure.toISOString().replace('T', ' ').slice(0, 16);
+    } else {
+      const tomorrowNoon = new Date();
+      tomorrowNoon.setDate(tomorrowNoon.getDate() + 1);
+      tomorrowNoon.setHours(12, 0, 0, 0);
+      checkOutTime = tomorrowNoon.toISOString().replace('T', ' ').slice(0, 16);
+    }
+
+    // Call authoritative createBooking to set room to 'occupied' across all devices and PostgreSQL
+    const createdBooking = createBooking({
+      roomId: assignedRoom.id,
+      assignedRoomIds: [assignedRoom.id],
+      guestName: checkin.guest_name,
+      phone: checkin.phone,
+      address: checkin.address || 'Kozhikode, Kerala',
+      idType: checkin.id_proof_type || 'Aadhaar Card',
+      idNumber: checkin.id_proof_number || 'VERIFIED',
+      idPhotoUrl: checkin.id_proof_photo_url || '',
+      idPhotoBackUrl: checkin.id_proof_back_photo_url || '',
+      checkInDate: checkInTime,
+      checkOutDate: checkOutTime,
+      nights: bookingType === 'day_use' ? 0 : 1,
+      bookingType,
+      durationHours: Number(durationHours) || 2,
+      groupSize: Number(groupSize) || 1,
+      rateApplied: Number(rateApplied) || (assignedRoom.room_type_id === 'deluxe' ? 2000 : 1500),
+      acOrNonAc: acOrNonAc || 'AC',
+      advancePaid: Number(advancePaid) || 0,
+      paymentMode: paymentMode || 'Cash',
+      isSeasonalRate: false,
+      seasonalName: null,
+      notes: `Pre-arrival QR Check-In (${checkin.id}) approved by ${currentStaff?.name || 'Reception'}.`
+    });
+
+    // Update self-check-in queue record to 'approved'
     setState(prev => ({
       ...prev,
       selfCheckins: (prev.selfCheckins || []).map(sc => {
         if (sc.id === checkinId) {
-          return { ...sc, status: 'confirmed_checked_in' };
+          return {
+            ...sc,
+            status: 'approved',
+            room_number: assignedRoom.room_number,
+            booking_id: createdBooking?.id,
+            approved_at: new Date().toISOString(),
+            approved_by: currentStaff?.name || 'Receptionist'
+          };
         }
         return sc;
       })
     }));
+
+    // Broadcast status update to guest's phone in real-time
+    realtimeRelay.broadcastMutation({
+      type: 'SELF_CHECKIN_STATUS_UPDATED',
+      selfCheckinId: checkinId,
+      status: 'approved',
+      room_number: assignedRoom.room_number,
+      bookingId: createdBooking?.id
+    });
+
+    logAudit(
+      'SELF_CHECKIN_APPROVED',
+      `Room ${assignedRoom.room_number}`,
+      `Self check-in for ${checkin.guest_name} approved and assigned to Room ${assignedRoom.room_number}.`
+    );
+
+    return createdBooking;
   };
+
+  const rejectSelfCheckin = (checkinId, reason = 'Additional verification required at counter', status = 'rejected') => {
+    setState(prev => ({
+      ...prev,
+      selfCheckins: (prev.selfCheckins || []).map(sc => {
+        if (sc.id === checkinId) {
+          return {
+            ...sc,
+            status,
+            rejection_reason: reason,
+            rejected_at: new Date().toISOString(),
+            rejected_by: currentStaff?.name || 'Receptionist'
+          };
+        }
+        return sc;
+      })
+    }));
+
+    // Broadcast status update to guest's phone so screen reflects note
+    realtimeRelay.broadcastMutation({
+      type: 'SELF_CHECKIN_STATUS_UPDATED',
+      selfCheckinId: checkinId,
+      status,
+      rejection_reason: reason
+    });
+
+    logAudit(
+      'SELF_CHECKIN_REJECTED',
+      `Pre-checkin ${checkinId}`,
+      `Self check-in ${status === 'needs_info' ? 'marked Needs Info' : 'rejected'}: "${reason}" by ${currentStaff?.name || 'Receptionist'}.`
+    );
+  };
+
+  const confirmSelfCheckin = approveSelfCheckin;
 
   // Scoped views for active property
   const activeProperty = (state.properties || SEED_PROPERTIES).find(p => p.id === state.activePropertyId) || SEED_PROPERTIES[0];
@@ -1732,6 +1904,8 @@ export function usePMSStore() {
       advanceHousekeepingStatus,
       closeShiftHandover,
       addGuestSelfCheckin,
+      approveSelfCheckin,
+      rejectSelfCheckin,
       confirmSelfCheckin,
       updateGuestIdProof,
       updateGSTConfig,

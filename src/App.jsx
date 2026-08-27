@@ -27,6 +27,7 @@ import GSTSettingsModal from './components/GSTSettingsModal';
 import DatabaseSettingsModal from './components/DatabaseSettingsModal';
 import GuestDossierModal from './components/GuestDossierModal';
 import FreshUpTiersModal from './components/FreshUpTiersModal';
+import PublicSelfCheckinPage from './components/PublicSelfCheckinPage';
 
 export default function App() {
   const store = usePMSStore();
@@ -34,6 +35,14 @@ export default function App() {
 
   // Authentication State: Opens directly to Login Gate
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Public Self-Checkin Route Gate: bypasses login when accessed via QR or public link
+  const [isPublicSelfCheckin, setIsPublicSelfCheckin] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const search = (window.location.search || '').toLowerCase();
+    const hash = (window.location.hash || '').toLowerCase();
+    return search.includes('view=self-checkin') || search.includes('view=checkin') || hash.includes('self-checkin') || hash.includes('checkin');
+  });
 
   // Tab Navigation: 'grid' | 'collections' | 'guests' | 'analytics' | 'pl' | 'overrides' | 'audit' | 'onboarding' | 'housekeeping'
   const [activeTab, setActiveTab] = useState('grid');
@@ -199,6 +208,22 @@ export default function App() {
       setIsPaperInvoiceOpen(true);
     }
   };
+
+  // 0. Public Guest Self-Registration Portal (No Staff Login Required)
+  if (isPublicSelfCheckin) {
+    return (
+      <PublicSelfCheckinPage
+        property={store.property}
+        onAddSelfCheckin={store.actions.addGuestSelfCheckin}
+        onNavigateToStaffLogin={() => {
+          setIsPublicSelfCheckin(false);
+          if (typeof window !== 'undefined' && window.history?.pushState) {
+            window.history.pushState(null, '', window.location.pathname);
+          }
+        }}
+      />
+    );
+  }
 
   // 1. If not authenticated, render the dedicated PIN keypad login gate
   if (!isAuthenticated) {
@@ -501,7 +526,9 @@ export default function App() {
           isOpen={isSelfCheckinModalOpen}
           onClose={() => setIsSelfCheckinModalOpen(false)}
           selfCheckins={store.selfCheckins}
-          onConfirmSelfCheckin={store.actions.confirmSelfCheckin}
+          onApproveSelfCheckin={store.actions.approveSelfCheckin}
+          onRejectSelfCheckin={store.actions.rejectSelfCheckin}
+          onConfirmSelfCheckin={store.actions.approveSelfCheckin}
           onAddSelfCheckin={store.actions.addGuestSelfCheckin}
           rooms={store.rooms}
           property={store.property}
