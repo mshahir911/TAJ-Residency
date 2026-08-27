@@ -29,6 +29,7 @@ import {
   saveSeasonalOverrideToSupabase,
   deleteSeasonalOverrideFromSupabase,
   fetchInitialDataset,
+  parseBookingFromSupabase,
   subscribeToSupabaseRealtime,
   migrateLegacyLocalStorageToSupabase,
   getOfflineQueue,
@@ -301,20 +302,15 @@ export function usePMSStore() {
           return { ...prev, bookings: nextBookings };
         }
         if (newRecord) {
-          const existing = (prev.bookings || {})[newRecord.id] || {};
+          const parsed = parseBookingFromSupabase(newRecord);
+          const existing = (prev.bookings || {})[parsed.id] || {};
           return {
             ...prev,
             bookings: {
               ...(prev.bookings || {}),
-              [newRecord.id]: {
+              [parsed.id]: {
                 ...existing,
-                ...newRecord,
-                booking_type: newRecord.booking_type || existing.booking_type || 'overnight',
-                duration_hours: newRecord.duration_hours || existing.duration_hours,
-                group_size: newRecord.group_size || existing.group_size || 1,
-                assigned_room_ids: newRecord.assigned_room_ids || existing.assigned_room_ids,
-                discount_amount: newRecord.discount_amount !== undefined ? newRecord.discount_amount : existing.discount_amount,
-                discount_reason: newRecord.discount_reason !== undefined ? newRecord.discount_reason : existing.discount_reason
+                ...parsed
               }
             }
           };
@@ -388,6 +384,22 @@ export function usePMSStore() {
     let isMounted = true;
 
     async function initSupabasePipeline() {
+      // 0. Clean up any invalid schema attributes in offline queue
+      try {
+        const raw = localStorage.getItem('taj_offline_write_queue');
+        if (raw) {
+          const q = JSON.parse(raw);
+          const cleaned = q.filter(item => {
+            if (item.table === 'rooms' && (item.payload?.day_use_end_time || item.payload?.is_day_use)) return false;
+            if (item.table === 'bookings' && (item.payload?.assigned_room_ids || item.payload?.duration_hours)) return false;
+            return true;
+          });
+          if (cleaned.length !== q.length) {
+            localStorage.setItem('taj_offline_write_queue', JSON.stringify(cleaned));
+          }
+        }
+      } catch (e) {}
+
       // 1. Check & execute one-time migration of any legacy localStorage data
       await migrateLegacyLocalStorageToSupabase(state.activePropertyId);
 
@@ -1039,14 +1051,22 @@ export function usePMSStore() {
       `${isDayUse ? '⚡ Fresh-Up' : 'Stay'} Guest ${guestName} (${linkedRoomNumbers.length} Rooms • ${groupSize} Pax • ₹${rateApplied}). Adv ₹${advancePaid} via ${paymentMode}. Staff: ${authorStaff}.`
     );
 
-    Promise.all([
-      saveGuestToSupabase(guestToSave),
-      ...updatedRooms.map(r => saveRoomToSupabase(r)),
-      saveBookingToSupabase(newBooking)
-    ]).then(() => {
-      setOfflineQueueCount(getOfflineQueue().length);
-    });
+    // Synchronous write to Supabase: save guest first to satisfy PostgreSQL foreign key constraint
+    saveGuestToSupabase(guestToSave)
+      .then(() => {
+        return Promise.all([
+          ...updatedRooms.map(r => saveRoomToSupabase(r)),
+          saveBookingToSupabase(newBooking)
+        ]);
+      })
+      .then(() => {
+        setOfflineQueueCount(getOfflineQueue().length);
+      })
+      .catch(err => {
+        console.warn('[Supabase Sync] Booking write error:', err);
+      });
 
+    // Realtime broadcast to all other open browsers/devices in < 150ms
     realtimeRelay.broadcastMutation({
       type: 'BOOKING_CREATED',
       booking: newBooking,

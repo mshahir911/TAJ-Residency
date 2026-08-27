@@ -138,6 +138,30 @@ export async function executeSupabaseMutation({ table, action = 'upsert', payloa
   }
 }
 
+export function parseBookingFromSupabase(b) {
+  if (!b) return b;
+  let parsed = { ...b, booking_type: b.booking_type || 'overnight' };
+  if (typeof b.seasonal_name === 'string' && b.seasonal_name.startsWith('FRESH_UP:')) {
+    try {
+      const meta = JSON.parse(b.seasonal_name.slice(9));
+      parsed = {
+        ...parsed,
+        booking_type: 'day_use',
+        duration_hours: meta.hours || 2,
+        group_size: meta.pax || 1,
+        assigned_room_ids: Array.isArray(meta.rooms) ? meta.rooms : [b.room_id],
+        linked_room_numbers: Array.isArray(meta.linked_rooms) ? meta.linked_rooms : [],
+        discount_amount: meta.discount || 0,
+        discount_reason: meta.reason || '',
+        seasonal_name: 'Fresh-Up / Day-Use Slabs'
+      };
+    } catch (e) {
+      console.warn('Failed to parse fresh up meta:', e);
+    }
+  }
+  return parsed;
+}
+
 function sanitizeRoomPayload(room) {
   if (!room) return null;
   return {
@@ -152,16 +176,26 @@ function sanitizeRoomPayload(room) {
     housekeeper_assigned: room.housekeeper_assigned || null,
     inspected_by: room.inspected_by || null,
     last_guest_name: room.last_guest_name || null,
-    checked_out_at: room.checked_out_at || null,
-    is_day_use: Boolean(room.is_day_use),
-    day_use_end_time: room.day_use_end_time || null,
-    group_size: room.group_size || null,
-    linked_room_numbers: Array.isArray(room.linked_room_numbers) ? room.linked_room_numbers : null
+    checked_out_at: room.checked_out_at || null
   };
 }
 
 function sanitizeBookingPayload(booking) {
   if (!booking) return null;
+  const isDayUse = booking.booking_type === 'day_use';
+  let seasonalName = booking.seasonal_name || null;
+  if (isDayUse) {
+    seasonalName = 'FRESH_UP:' + JSON.stringify({
+      type: 'day_use',
+      hours: Number(booking.duration_hours) || 2,
+      pax: Number(booking.group_size) || 1,
+      rooms: Array.isArray(booking.assigned_room_ids) ? booking.assigned_room_ids : [booking.room_id],
+      linked_rooms: Array.isArray(booking.linked_room_numbers) ? booking.linked_room_numbers : [],
+      discount: Number(booking.discount_amount) || 0,
+      reason: booking.discount_reason || ''
+    });
+  }
+
   return {
     id: booking.id,
     property_id: booking.property_id || 'taj-residency-calicut',
@@ -170,19 +204,15 @@ function sanitizeBookingPayload(booking) {
     status: booking.status || 'confirmed',
     check_in_date: booking.check_in_date,
     check_out_date: booking.check_out_date,
-    nights: Number(booking.nights) || (booking.booking_type === 'day_use' ? 0 : 1),
-    booking_type: booking.booking_type || 'overnight',
-    duration_hours: booking.duration_hours || null,
-    group_size: booking.group_size || 1,
-    assigned_room_ids: Array.isArray(booking.assigned_room_ids) ? booking.assigned_room_ids : [booking.room_id],
-    discount_amount: Number(booking.discount_amount) || 0,
-    discount_reason: booking.discount_reason || null,
+    nights: isDayUse ? 0 : (Number(booking.nights) || 1),
     rate_applied: Number(booking.rate_applied) || 1500,
     ac_or_non_ac: booking.ac_or_non_ac || 'AC',
     advance_paid: Number(booking.advance_paid) || 0,
     payment_mode: booking.payment_mode || 'Cash',
     created_by_staff_name: booking.created_by_staff_name || 'Reception Desk',
-    wifi_code: booking.wifi_code || null
+    wifi_code: booking.wifi_code || null,
+    is_seasonal_rate: isDayUse ? true : Boolean(booking.is_seasonal_rate),
+    seasonal_name: seasonalName
   };
 }
 
@@ -278,17 +308,34 @@ export async function fetchInitialDataset(propertyId = 'taj-residency-calicut') 
       hasData: false
     };
 
-    if (roomsRes.status === 'fulfilled' && roomsRes.value?.data?.length) {
-      result.rooms = roomsRes.value.data;
-      result.hasData = true;
-    }
-
     if (bookingsRes.status === 'fulfilled' && bookingsRes.value?.data?.length) {
       const bookingsMap = {};
-      bookingsRes.value.data.forEach(b => {
+      bookingsRes.value.data.forEach(rawBooking => {
+        const b = parseBookingFromSupabase(rawBooking);
         bookingsMap[b.id] = b;
       });
       result.bookings = bookingsMap;
+      result.hasData = true;
+    }
+
+    if (roomsRes.status === 'fulfilled' && roomsRes.value?.data?.length) {
+      const rawRooms = roomsRes.value.data;
+      // Rehydrate room state from active bookings if fresh-up
+      result.rooms = rawRooms.map(r => {
+        if (r.current_booking_id && result.bookings && result.bookings[r.current_booking_id]) {
+          const b = result.bookings[r.current_booking_id];
+          if (b.booking_type === 'day_use') {
+            return {
+              ...r,
+              is_day_use: true,
+              day_use_end_time: b.check_out_date,
+              group_size: b.group_size,
+              linked_room_numbers: b.linked_room_numbers || [r.room_number]
+            };
+          }
+        }
+        return r;
+      });
       result.hasData = true;
     }
 
