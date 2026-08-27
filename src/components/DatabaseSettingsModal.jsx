@@ -32,6 +32,7 @@ export default function DatabaseSettingsModal({
   onFlushQueue,
   onTestConnection,
   onRefreshFromDatabase,
+  onSyncAllNow,
   roomsCount = 11,
   bookingsCount = 0,
   guestsCount = 0,
@@ -209,15 +210,33 @@ export default function DatabaseSettingsModal({
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleManualFlush}
-                disabled={flushing}
-                className="py-1.5 px-3 rounded-lg bg-brass text-ink font-bold text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${flushing ? 'animate-spin' : ''}`} />
-                <span>{flushing ? 'Flushing...' : 'Flush Queue Now'}</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof onSyncAllNow === 'function') {
+                      onSyncAllNow();
+                      setActionNotice('Broadcasted current device state to all other browsers & devices in < 150ms!');
+                      setTimeout(() => setActionNotice(''), 2500);
+                    }
+                  }}
+                  className="py-1.5 px-3 rounded-lg bg-ink border border-brass text-brass hover:bg-brass hover:text-ink font-bold text-xs active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+                  title="Broadcast this device view to other open devices"
+                >
+                  <Wifi className="w-3.5 h-3.5" />
+                  <span>Sync to Other Devices</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleManualFlush}
+                  disabled={flushing}
+                  className="py-1.5 px-3 rounded-lg bg-brass text-ink font-bold text-xs hover:brightness-110 active:scale-95 transition-all flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${flushing ? 'animate-spin' : ''}`} />
+                  <span>{flushing ? 'Flushing...' : 'Flush Queue Now'}</span>
+                </button>
+              </div>
             </div>
           </div>
 

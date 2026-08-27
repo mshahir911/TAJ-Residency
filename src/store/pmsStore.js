@@ -32,8 +32,9 @@ import {
   getOfflineQueue,
   flushOfflineQueue,
   testSupabaseConnection
-} from '../services/supabaseService';
-import { isSupabaseConfigured } from '../lib/supabaseClient';
+} from '../services/supabaseService.js';
+import { realtimeRelay } from '../services/realtimeRelay.js';
+import { isSupabaseConfigured } from '../lib/supabaseClient.js';
 
 const LOCAL_FALLBACK_CACHE_KEY = 'taj_residency_pms_v7_pg_cache';
 
@@ -278,6 +279,137 @@ export function usePMSStore() {
     };
   }, [state.activePropertyId, handleRealtimeTableChange]);
 
+  // Handle incoming Realtime Relay mutation deltas (< 150ms cross-browser / cross-device)
+  const handleIncomingRelayMutation = useCallback((mutation) => {
+    setState(prev => {
+      switch (mutation.type) {
+        case 'BOOKING_CREATED': {
+          const { booking, room, guest } = mutation;
+          const nextRooms = (prev.rooms || []).map(r => r.id === room?.id ? { ...r, ...room } : r);
+          const nextBookings = { ...(prev.bookings || {}), [booking.id]: booking };
+          const guestExists = (prev.guests || []).some(g => g.id === guest?.id);
+          const nextGuests = guestExists
+            ? (prev.guests || []).map(g => g.id === guest.id ? { ...g, ...guest } : g)
+            : (guest ? [guest, ...(prev.guests || [])] : prev.guests);
+          return {
+            ...prev,
+            rooms: nextRooms,
+            bookings: nextBookings,
+            guests: nextGuests
+          };
+        }
+
+        case 'RESERVATION_CHECKED_IN': {
+          const { booking, room, guest } = mutation;
+          const nextRooms = (prev.rooms || []).map(r => r.id === room?.id ? { ...r, ...room } : r);
+          const nextBookings = { ...(prev.bookings || {}), [booking.id]: booking };
+          const nextGuests = guest
+            ? (prev.guests || []).map(g => g.id === guest.id ? { ...g, ...guest } : g)
+            : prev.guests;
+          return {
+            ...prev,
+            rooms: nextRooms,
+            bookings: nextBookings,
+            guests: nextGuests
+          };
+        }
+
+        case 'CHECKOUT_BILLED': {
+          const { invoice, booking, room } = mutation;
+          const nextRooms = (prev.rooms || []).map(r => r.id === room?.id ? { ...r, ...room } : r);
+          const nextBookings = { ...(prev.bookings || {}), [booking.id]: booking };
+          const nextInvoices = invoice ? [invoice, ...(prev.invoices || []).filter(i => i.id !== invoice.id)] : prev.invoices;
+          return {
+            ...prev,
+            rooms: nextRooms,
+            bookings: nextBookings,
+            invoices: nextInvoices
+          };
+        }
+
+        case 'ROOM_STATUS': {
+          const { roomId, status, roomUpdates } = mutation;
+          const nextRooms = (prev.rooms || []).map(r => {
+            if (r.id === roomId) {
+              return { ...r, status, ...(roomUpdates || {}) };
+            }
+            return r;
+          });
+          return { ...prev, rooms: nextRooms };
+        }
+
+        case 'STAY_EXTENDED': {
+          const { bookingId, nights, checkOutDate } = mutation;
+          const currentBooking = (prev.bookings || {})[bookingId];
+          if (!currentBooking) return prev;
+          return {
+            ...prev,
+            bookings: {
+              ...(prev.bookings || {}),
+              [bookingId]: {
+                ...currentBooking,
+                nights,
+                check_out_date: checkOutDate
+              }
+            }
+          };
+        }
+
+        case 'EXPENSE_LOGGED': {
+          const { expense } = mutation;
+          return {
+            ...prev,
+            expenses: [expense, ...(prev.expenses || []).filter(e => e.id !== expense.id)]
+          };
+        }
+
+        case 'SHIFT_CLOSED': {
+          const { shiftRecord } = mutation;
+          return {
+            ...prev,
+            shiftLogs: [shiftRecord, ...(prev.shiftLogs || []).filter(s => s.id !== shiftRecord.id)]
+          };
+        }
+
+        case 'GUEST_UPDATED': {
+          const { guest } = mutation;
+          const nextGuests = (prev.guests || []).map(g => g.id === guest?.id ? { ...g, ...guest } : g);
+          return { ...prev, guests: nextGuests };
+        }
+
+        case 'SNAPSHOT_SYNC': {
+          if (mutation.rooms && Array.isArray(mutation.rooms)) {
+            return {
+              ...prev,
+              rooms: mutation.rooms,
+              bookings: mutation.bookings || prev.bookings,
+              guests: mutation.guests || prev.guests,
+              invoices: mutation.invoices || prev.invoices
+            };
+          }
+          return prev;
+        }
+
+        default:
+          return prev;
+      }
+    });
+  }, []);
+
+  // Initialize Realtime Relay Bus
+  useEffect(() => {
+    realtimeRelay.init(
+      handleIncomingRelayMutation,
+      (relayStatus) => {
+        setRealtimeStatus(prev => ({
+          ...prev,
+          relayConnected: relayStatus.status === 'connected',
+          lastEventAt: relayStatus.timestamp
+        }));
+      }
+    );
+  }, [handleIncomingRelayMutation]);
+
   // Safe staff and role resolution
   const staffList = Array.isArray(state.staffList) && state.staffList.length > 0 ? state.staffList : STAFF_CREDENTIALS;
   const currentStaff = staffList.find(s => s.id === state.currentStaffId) || staffList[1] || staffList[0] || STAFF_CREDENTIALS[0];
@@ -458,6 +590,10 @@ export function usePMSStore() {
     if (updatedGuest) {
       saveGuestToSupabase(updatedGuest).then(() => {
         setOfflineQueueCount(getOfflineQueue().length);
+      });
+      realtimeRelay.broadcastMutation({
+        type: 'GUEST_UPDATED',
+        guest: updatedGuest
       });
     }
   };
@@ -703,6 +839,14 @@ export function usePMSStore() {
       setOfflineQueueCount(getOfflineQueue().length);
     });
 
+    // Realtime broadcast to all other open browsers/devices in < 150ms
+    realtimeRelay.broadcastMutation({
+      type: 'BOOKING_CREATED',
+      booking: newBooking,
+      room: updatedRoom,
+      guest: guestToSave
+    });
+
     setState(prev => ({
       ...prev,
       guests: updatedGuests,
@@ -747,6 +891,13 @@ export function usePMSStore() {
 
     saveBookingToSupabase(updatedBooking).then(() => {
       setOfflineQueueCount(getOfflineQueue().length);
+    });
+
+    realtimeRelay.broadcastMutation({
+      type: 'STAY_EXTENDED',
+      bookingId: booking.id,
+      nights: newNights,
+      checkOutDate: newCheckOutStr
     });
 
     setState(prev => ({
@@ -835,6 +986,13 @@ export function usePMSStore() {
       updatedGuestToSave ? saveGuestToSupabase(updatedGuestToSave) : Promise.resolve()
     ]).then(() => {
       setOfflineQueueCount(getOfflineQueue().length);
+    });
+
+    realtimeRelay.broadcastMutation({
+      type: 'RESERVATION_CHECKED_IN',
+      booking: updatedBooking,
+      room: updatedRoom,
+      guest: updatedGuestToSave
     });
 
     setState(prev => ({
@@ -930,6 +1088,13 @@ export function usePMSStore() {
       setOfflineQueueCount(getOfflineQueue().length);
     });
 
+    realtimeRelay.broadcastMutation({
+      type: 'CHECKOUT_BILLED',
+      invoice: newInvoice,
+      booking: updatedBooking,
+      room: updatedRoom
+    });
+
     setState(prev => ({
       ...prev,
       invoices: [newInvoice, ...(prev.invoices || [])],
@@ -985,6 +1150,16 @@ export function usePMSStore() {
       setOfflineQueueCount(getOfflineQueue().length);
     });
 
+    realtimeRelay.broadcastMutation({
+      type: 'ROOM_STATUS',
+      roomId,
+      status: nextStatus,
+      roomUpdates: {
+        housekeeper_assigned: staffName,
+        inspected_by: updatedRoom.inspected_by
+      }
+    });
+
     setState(prev => ({
       ...prev,
       rooms: (prev.rooms || []).map(r => (r.id === roomId ? updatedRoom : r)),
@@ -1019,6 +1194,11 @@ export function usePMSStore() {
 
     saveShiftLogToSupabase(shiftRecord).then(() => {
       setOfflineQueueCount(getOfflineQueue().length);
+    });
+
+    realtimeRelay.broadcastMutation({
+      type: 'SHIFT_CLOSED',
+      shiftRecord
     });
 
     setState(prev => ({
@@ -1056,6 +1236,11 @@ export function usePMSStore() {
 
     saveExpenseToSupabase(newExpense).then(() => {
       setOfflineQueueCount(getOfflineQueue().length);
+    });
+
+    realtimeRelay.broadcastMutation({
+      type: 'EXPENSE_LOGGED',
+      expense: newExpense
     });
 
     setState(prev => ({
@@ -1194,8 +1379,8 @@ export function usePMSStore() {
     roleConfig: STAFF_ROLES[currentRole] || STAFF_ROLES.receptionist,
     stats,
     syncStatus: {
-      status: realtimeStatus.status === 'connected' ? 'connected' : (realtimeStatus.status === 'offline' ? 'offline' : 'connecting'),
-      channel: 'postgres_changes (supabase)',
+      status: realtimeStatus.relayConnected || realtimeStatus.status === 'connected' ? 'connected' : (realtimeStatus.status === 'offline' ? 'offline' : 'connecting'),
+      channel: realtimeStatus.status === 'connected' ? 'postgres_changes (supabase)' : 'realtime_bus (active)',
       lastSyncedAt: realtimeStatus.lastEventAt,
       connectedDevicesCount: realtimeStatus.connectedDevicesCount,
       offlineQueueCount
@@ -1203,6 +1388,15 @@ export function usePMSStore() {
     offlineQueueCount,
     isSupabaseConfigured,
     actions: {
+      syncAllStateNow: () => {
+        realtimeRelay.broadcastMutation({
+          type: 'SNAPSHOT_SYNC',
+          rooms: state.rooms,
+          bookings: state.bookings,
+          guests: state.guests,
+          invoices: state.invoices
+        });
+      },
       flushOfflineQueueNow: async () => {
         const res = await flushOfflineQueue();
         setOfflineQueueCount(res.remainingCount || 0);

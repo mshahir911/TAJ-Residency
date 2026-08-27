@@ -569,6 +569,7 @@ export default function App() {
           onFlushQueue={store.actions.flushOfflineQueueNow}
           onTestConnection={store.actions.testDatabaseConnection}
           onRefreshFromDatabase={store.actions.refreshFromDatabase}
+          onSyncAllNow={store.actions.syncAllStateNow}
           roomsCount={store.rooms.length}
           bookingsCount={Object.keys(store.bookings || {}).length}
           guestsCount={store.guests.length}
