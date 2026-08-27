@@ -40,8 +40,8 @@ export default function PaperInvoice({
   const sacCode = gstConfig?.sacCode || '996311';
   const legalEntity = gstConfig?.legalEntity || property?.legal_entity || property?.name || 'Taj Residency';
 
-  const roomNum = invoice?.room_number || room?.room_number || 'Room';
-  const invoiceNo = invoice?.id || `TR/INV/${roomNum}/${Math.floor(1000 + Math.random() * 9000)}`;
+  const roomNum = (booking?.linked_room_numbers?.length > 1 ? booking.linked_room_numbers.join(', ') : null) || invoice?.room_number || room?.room_number || 'Room';
+  const invoiceNo = invoice?.id || `TR/INV/${String(roomNum).replace(/[^0-9]/g, '').slice(0, 8) || 'MAIN'}/${Math.floor(1000 + Math.random() * 9000)}`;
   const invoiceDate = invoice?.paid_at || new Date().toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
@@ -330,8 +330,8 @@ _Thank you for choosing Taj Residency!_`;
                 <td className="p-2 text-slate-600">{sacCode}</td>
                 <td className="p-2 font-sans font-medium text-black">
                   {booking?.booking_type === 'day_use'
-                    ? `Fresh-Up Day Accommodation (${booking?.duration_hours || 2} Hours, ${booking?.group_size || 1} Pax @ Tiered Rate • ${booking?.ac_or_non_ac || 'AC'})`
-                    : `Room Accommodation (${room.room_type_id === 'deluxe' ? 'Deluxe Room' : 'Classic Room'} - ${booking?.ac_or_non_ac || 'AC'})`}
+                    ? `Fresh-Up Day Accommodation (${booking?.linked_room_numbers?.length > 1 ? `${booking.linked_room_numbers.length} Rooms: ${booking.linked_room_numbers.join(', ')} • ` : ''}${booking?.duration_hours || 2} Hours, ${booking?.group_size || 1} Pax @ Tiered Rate • ${booking?.ac_or_non_ac || 'AC'})`
+                    : `Room Accommodation (${room?.room_type_id === 'deluxe' ? 'Deluxe Room' : 'Classic Room'} - ${booking?.ac_or_non_ac || 'AC'})`}
                 </td>
                 <td className="p-2 text-center">{booking?.booking_type === 'day_use' ? `${booking?.duration_hours || 2}h` : nights}</td>
                 <td className="p-2 text-right">{formatCurrency(rateApplied)}</td>

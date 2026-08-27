@@ -277,7 +277,20 @@ export function usePMSStore() {
   const handleRealtimeTableChange = useCallback(({ table, eventType, newRecord, oldRecord }) => {
     setState(prev => {
       if (table === 'rooms' && newRecord) {
-        const updatedRooms = (prev.rooms || []).map(r => (r.id === newRecord.id ? { ...r, ...newRecord } : r));
+        const updatedRooms = (prev.rooms || []).map(r => {
+          if (r.id === newRecord.id) {
+            return {
+              ...r,
+              ...newRecord,
+              // Preserve client-only/extended day-use fields if not in postgres
+              is_day_use: newRecord.is_day_use !== undefined ? newRecord.is_day_use : r.is_day_use,
+              day_use_end_time: newRecord.day_use_end_time !== undefined ? newRecord.day_use_end_time : r.day_use_end_time,
+              group_size: newRecord.group_size !== undefined ? newRecord.group_size : r.group_size,
+              linked_room_numbers: newRecord.linked_room_numbers !== undefined ? newRecord.linked_room_numbers : r.linked_room_numbers
+            };
+          }
+          return r;
+        });
         return { ...prev, rooms: updatedRooms };
       }
 
@@ -288,11 +301,21 @@ export function usePMSStore() {
           return { ...prev, bookings: nextBookings };
         }
         if (newRecord) {
+          const existing = (prev.bookings || {})[newRecord.id] || {};
           return {
             ...prev,
             bookings: {
               ...(prev.bookings || {}),
-              [newRecord.id]: newRecord
+              [newRecord.id]: {
+                ...existing,
+                ...newRecord,
+                booking_type: newRecord.booking_type || existing.booking_type || 'overnight',
+                duration_hours: newRecord.duration_hours || existing.duration_hours,
+                group_size: newRecord.group_size || existing.group_size || 1,
+                assigned_room_ids: newRecord.assigned_room_ids || existing.assigned_room_ids,
+                discount_amount: newRecord.discount_amount !== undefined ? newRecord.discount_amount : existing.discount_amount,
+                discount_reason: newRecord.discount_reason !== undefined ? newRecord.discount_reason : existing.discount_reason
+              }
             }
           };
         }
@@ -424,8 +447,12 @@ export function usePMSStore() {
     setState(prev => {
       switch (mutation.type) {
         case 'BOOKING_CREATED': {
-          const { booking, room, guest } = mutation;
-          const nextRooms = (prev.rooms || []).map(r => r.id === room?.id ? { ...r, ...room } : r);
+          const { booking, room, rooms, guest } = mutation;
+          const updatedRoomsList = Array.isArray(rooms) ? rooms : (room ? [room] : []);
+          const nextRooms = (prev.rooms || []).map(r => {
+            const match = updatedRoomsList.find(ur => ur.id === r.id);
+            return match ? { ...r, ...match } : r;
+          });
           const nextBookings = { ...(prev.bookings || {}), [booking.id]: booking };
           const guestExists = (prev.guests || []).some(g => g.id === guest?.id);
           const nextGuests = guestExists
@@ -864,9 +891,10 @@ export function usePMSStore() {
     }));
   };
 
-  // 6. Booking Creation (Writes to Supabase first)
+  // 6. Create New Booking (Walk-In or Fresh-Up with Optional Multi-Room Allocation)
   const createBooking = ({
     roomId,
+    assignedRoomIds = [],
     guestName,
     guestPhone,
     guestAddress,
@@ -889,8 +917,14 @@ export function usePMSStore() {
     freshUpDiscountReason = '',
     customRateApplied = null
   }) => {
-    const room = (state.rooms || SEED_ROOMS).find(r => r.id === roomId);
-    if (!room) return;
+    const targetRoomIds = Array.isArray(assignedRoomIds) && assignedRoomIds.length > 0
+      ? assignedRoomIds
+      : [roomId];
+
+    const targetRooms = (state.rooms || SEED_ROOMS).filter(r => targetRoomIds.includes(r.id));
+    const linkedRoomNumbers = targetRooms.map(r => r.room_number);
+    const primaryRoom = targetRooms[0] || (state.rooms || SEED_ROOMS).find(r => r.id === roomId);
+    if (!primaryRoom) return;
 
     const authorStaff = created_by_staff_name || currentStaff?.name || 'Receptionist';
     const nowTimestamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
@@ -944,6 +978,7 @@ export function usePMSStore() {
       (new Date(checkOutDate).getTime() - new Date(checkInDate).getTime()) / (1000 * 60 * 60 * 24)
     )) || 1;
 
+    const rateLookup = getRateForRoom(primaryRoom.room_type_id, acOrNonAc, checkInDate);
     const isDayUse = bookingType === 'day_use';
     let rateApplied = rateLookup.rate;
     if (isDayUse) {
@@ -955,13 +990,15 @@ export function usePMSStore() {
       }
     }
 
-    const bookingId = `bk-${room.room_number}-${Date.now().toString().slice(-4)}`;
-    const wifiCode = generateWiFiCode(room.room_number);
+    const bookingId = `bk-${primaryRoom.room_number}-${Date.now().toString().slice(-4)}`;
+    const wifiCode = generateWiFiCode(primaryRoom.room_number);
 
     const newBooking = {
       id: bookingId,
       property_id: state.activePropertyId,
-      room_id: roomId,
+      room_id: primaryRoom.id,
+      assigned_room_ids: targetRoomIds,
+      linked_room_numbers: linkedRoomNumbers,
       guest_id: guestId,
       check_in_date: checkInDate,
       check_out_date: checkOutDate,
@@ -984,36 +1021,37 @@ export function usePMSStore() {
     };
 
     const nextRoomStatus = isPreBooking ? 'reserved' : 'occupied';
-    const updatedRoom = {
-      ...room,
+    const updatedRooms = targetRooms.map(r => ({
+      ...r,
       status: nextRoomStatus,
       current_booking_id: bookingId,
       wifi_voucher_code: wifiCode,
       is_day_use: isDayUse,
       day_use_end_time: isDayUse ? checkOutDate : null,
-      group_size: isDayUse ? Number(groupSize) : null
-    };
+      group_size: isDayUse ? Number(groupSize) : null,
+      last_guest_name: guestName,
+      linked_room_numbers: linkedRoomNumbers
+    }));
 
     const auditEntry = logAudit(
       'BOOKING_CREATED',
-      `Room ${room.room_number}`,
-      `Guest ${guestName} (${acOrNonAc} @ ₹${rateApplied}/night). Adv ₹${advancePaid} via ${paymentMode}. Staff: ${authorStaff}. WiFi: ${wifiCode}`
+      `Room ${linkedRoomNumbers.join(', ')}`,
+      `${isDayUse ? '⚡ Fresh-Up' : 'Stay'} Guest ${guestName} (${linkedRoomNumbers.length} Rooms • ${groupSize} Pax • ₹${rateApplied}). Adv ₹${advancePaid} via ${paymentMode}. Staff: ${authorStaff}.`
     );
 
-    // Synchronous write to Supabase
     Promise.all([
       saveGuestToSupabase(guestToSave),
-      saveRoomToSupabase(updatedRoom),
+      ...updatedRooms.map(r => saveRoomToSupabase(r)),
       saveBookingToSupabase(newBooking)
     ]).then(() => {
       setOfflineQueueCount(getOfflineQueue().length);
     });
 
-    // Realtime broadcast to all other open browsers/devices in < 150ms
     realtimeRelay.broadcastMutation({
       type: 'BOOKING_CREATED',
       booking: newBooking,
-      room: updatedRoom,
+      rooms: updatedRooms,
+      room: updatedRooms[0],
       guest: guestToSave
     });
 
@@ -1024,7 +1062,10 @@ export function usePMSStore() {
         ...(prev.bookings || {}),
         [bookingId]: newBooking
       },
-      rooms: (prev.rooms || []).map(r => (r.id === roomId ? updatedRoom : r)),
+      rooms: (prev.rooms || []).map(r => {
+        const matchingUpdated = updatedRooms.find(ur => ur.id === r.id);
+        return matchingUpdated ? matchingUpdated : r;
+      }),
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
 
@@ -1149,7 +1190,6 @@ export function usePMSStore() {
       `Advance reservation for ${guest?.name || 'Guest'} checked in to Room ${room?.room_number}. Advance: ₹${totalAdvance}. Staff: ${authorStaff}.`
     );
 
-    // Save synchronously to Supabase
     Promise.all([
       saveBookingToSupabase(updatedBooking),
       saveRoomToSupabase(updatedRoom),
@@ -1196,7 +1236,6 @@ export function usePMSStore() {
       nights = 0;
       grossRoomCharge = Number(booking.rate_applied || 0);
     } else {
-      // Apply hotel-standard noon-to-noon billing rules (12:00 PM cutoff)
       const billingInfo = calculateCheckoutBilling({
         checkInDate: booking.check_in_date,
         plannedNights: booking.nights || 1,
@@ -1247,32 +1286,44 @@ export function usePMSStore() {
       paid_at: new Date().toISOString().replace('T', ' ').slice(0, 16)
     };
 
+    const assignedIds = Array.isArray(booking.assigned_room_ids) && booking.assigned_room_ids.length > 0
+      ? booking.assigned_room_ids
+      : [roomId];
+
+    const updatedRooms = (state.rooms || []).map(r => {
+      if (assignedIds.includes(r.id)) {
+        return {
+          ...r,
+          status: 'dirty',
+          current_booking_id: null,
+          is_day_use: false,
+          day_use_end_time: null,
+          group_size: null,
+          linked_room_numbers: [],
+          last_guest_name: guest?.name || 'Guest',
+          checked_out_at: new Date().toISOString().replace('T', ' ').slice(0, 16)
+        };
+      }
+      return r;
+    });
+
     const updatedBooking = {
       ...booking,
-      status: 'checked_out'
-    };
-
-    const updatedRoom = {
-      ...room,
-      status: 'dirty',
-      last_guest_name: guest?.name,
-      checked_out_at: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      current_booking_id: null,
-      wifi_voucher_code: null,
-      housekeeper_assigned: 'Meera Thomas (HK Lead)'
+      status: 'checked_out',
+      actual_checkout_at: new Date().toISOString().replace('T', ' ').slice(0, 16)
     };
 
     const auditEntry = logAudit(
-      'CHECKOUT_BILLED',
-      `Room ${room.room_number}`,
-      `Billed ${guest?.name}. Gross: ₹${grossRoomCharge}${finalDiscount > 0 ? `, Discount: -₹${finalDiscount}` : ''}, Total: ₹${grandTotal}, Settled: ₹${balanceSettled} via ${paymentMode}. Staff: ${billerStaff}. Room auto-flagged DIRTY.`
+      'CHECKOUT_PROCESSED',
+      `Room ${booking.linked_room_numbers?.join(', ') || room.room_number}`,
+      `Invoice #${invoiceId} settled for ₹${grandTotal} (${paymentMode}). Discount: ₹${finalDiscount}. Handled by: ${billerStaff}`
     );
 
-    // Save synchronously to Supabase
     Promise.all([
       saveInvoiceToSupabase(newInvoice),
       saveBookingToSupabase(updatedBooking),
-      saveRoomToSupabase(updatedRoom)
+      ...updatedRooms.filter(r => assignedIds.includes(r.id)).map(r => saveRoomToSupabase(r)),
+      guest ? saveGuestToSupabase({ ...guest, total_stays: (guest.total_stays || 1) + 1, lifetime_spend: (guest.lifetime_spend || 0) + grandTotal }) : Promise.resolve()
     ]).then(() => {
       setOfflineQueueCount(getOfflineQueue().length);
     });
@@ -1281,17 +1332,18 @@ export function usePMSStore() {
       type: 'CHECKOUT_BILLED',
       invoice: newInvoice,
       booking: updatedBooking,
-      room: updatedRoom
+      rooms: updatedRooms.filter(r => assignedIds.includes(r.id)),
+      room: updatedRooms.find(r => r.id === roomId)
     });
 
     setState(prev => ({
       ...prev,
-      invoices: [newInvoice, ...(prev.invoices || [])],
+      rooms: updatedRooms,
       bookings: {
         ...(prev.bookings || {}),
         [booking.id]: updatedBooking
       },
-      rooms: (prev.rooms || []).map(r => (r.id === roomId ? updatedRoom : r)),
+      invoices: [newInvoice, ...(prev.invoices || []).filter(i => i.id !== invoiceId)],
       auditLogs: [auditEntry, ...(prev.auditLogs || [])]
     }));
 

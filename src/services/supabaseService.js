@@ -138,7 +138,6 @@ export async function executeSupabaseMutation({ table, action = 'upsert', payloa
   }
 }
 
-// Payload sanitizers to ensure exact PostgreSQL schema compliance
 function sanitizeRoomPayload(room) {
   if (!room) return null;
   return {
@@ -153,7 +152,11 @@ function sanitizeRoomPayload(room) {
     housekeeper_assigned: room.housekeeper_assigned || null,
     inspected_by: room.inspected_by || null,
     last_guest_name: room.last_guest_name || null,
-    checked_out_at: room.checked_out_at || null
+    checked_out_at: room.checked_out_at || null,
+    is_day_use: Boolean(room.is_day_use),
+    day_use_end_time: room.day_use_end_time || null,
+    group_size: room.group_size || null,
+    linked_room_numbers: Array.isArray(room.linked_room_numbers) ? room.linked_room_numbers : null
   };
 }
 
@@ -167,7 +170,13 @@ function sanitizeBookingPayload(booking) {
     status: booking.status || 'confirmed',
     check_in_date: booking.check_in_date,
     check_out_date: booking.check_out_date,
-    nights: Number(booking.nights) || 1,
+    nights: Number(booking.nights) || (booking.booking_type === 'day_use' ? 0 : 1),
+    booking_type: booking.booking_type || 'overnight',
+    duration_hours: booking.duration_hours || null,
+    group_size: booking.group_size || 1,
+    assigned_room_ids: Array.isArray(booking.assigned_room_ids) ? booking.assigned_room_ids : [booking.room_id],
+    discount_amount: Number(booking.discount_amount) || 0,
+    discount_reason: booking.discount_reason || null,
     rate_applied: Number(booking.rate_applied) || 1500,
     ac_or_non_ac: booking.ac_or_non_ac || 'AC',
     advance_paid: Number(booking.advance_paid) || 0,

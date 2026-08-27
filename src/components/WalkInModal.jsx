@@ -63,17 +63,41 @@ export default function WalkInModal({
   const targetInitial = propSelectedRoom || preselectedRoom || vacantRooms[0] || rooms[0] || { id: 'room-202', room_number: '202', room_type_id: 'classic' };
 
   const [roomId, setRoomId] = useState(targetInitial?.id || '');
-  const selectedRoom = rooms.find(r => r.id === roomId) || targetInitial;
+  const [selectedRoomIds, setSelectedRoomIds] = useState(() => [targetInitial?.id || 'room-202']);
+  const selectedRoom = rooms.find(r => r.id === (selectedRoomIds[0] || roomId)) || targetInitial;
   const roomType = (ROOM_TYPES && ROOM_TYPES[selectedRoom?.room_type_id]) || ROOM_TYPES?.deluxe || { name: 'Standard Room', ac_rate: 2000, non_ac_rate: 1500 };
 
   // Keep synced if preselected room changes
   useEffect(() => {
     if (propSelectedRoom?.id) {
       setRoomId(propSelectedRoom.id);
+      setSelectedRoomIds([propSelectedRoom.id]);
     } else if (preselectedRoom?.id) {
       setRoomId(preselectedRoom.id);
+      setSelectedRoomIds([preselectedRoom.id]);
     }
   }, [propSelectedRoom, preselectedRoom]);
+
+  // Multi-room assignment handlers for fresh-up groups
+  const handleToggleRoom = (rId) => {
+    setSelectedRoomIds(prev => {
+      if (prev.includes(rId)) {
+        if (prev.length <= 1) return prev; // Always keep at least 1 room
+        return prev.filter(id => id !== rId);
+      } else {
+        return [...prev, rId];
+      }
+    });
+    setRoomId(rId);
+  };
+
+  const handleQuickAssignRoomCount = (count) => {
+    const available = vacantRooms.slice(0, count).map(r => r.id);
+    if (available.length > 0) {
+      setSelectedRoomIds(available);
+      setRoomId(available[0]);
+    }
+  };
 
   // 1. Advance Reservation Detection
   // Check if room or preselected booking has an active advance reservation
@@ -401,9 +425,11 @@ export default function WalkInModal({
     }
 
     const saveFn = onSaveBooking || onSubmit;
+    const finalRoomIds = isDayUse && selectedRoomIds.length > 0 ? selectedRoomIds : [selectedRoom?.id || roomId];
     if (typeof saveFn === 'function') {
       saveFn({
-        roomId: selectedRoom?.id || roomId,
+        roomId: finalRoomIds[0],
+        assignedRoomIds: finalRoomIds,
         guestName: name,
         guestPhone: phone,
         guestAddress: address,
@@ -855,67 +881,190 @@ export default function WalkInModal({
                       )}
                     </div>
 
-                    {/* Room Selection & Climate Type Banner */}
-                    <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                            Select Room
-                          </label>
-                          <select
-                            value={roomId}
-                            onChange={(e) => setRoomId(e.target.value)}
-                            className="bg-panel border border-brass-soft rounded-lg px-3 py-1.5 text-white font-mono font-bold text-sm focus:outline-none focus:border-brass"
-                          >
-                            {vacantRooms.map(r => (
-                              <option key={r.id} value={r.id}>
-                                Room {r.room_number} (Floor {r.floor} &bull; {r.status.toUpperCase()})
-                              </option>
+                    {/* Room Selection & Climate: Multi-Room for Fresh-Up Groups OR Single Room for Overnight */}
+                    {isDayUse ? (
+                      <div className="bg-ink p-4 rounded-xl border border-amber-500/40 space-y-3 font-mono text-xs animate-in fade-in">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brass-soft/20 pb-2">
+                          <div>
+                            <span className="text-[10px] uppercase text-amber-300 font-bold block">
+                              Assign Rooms for Fresh-Up Group ({selectedRoomIds.length} Rooms Selected)
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-sans">
+                              {effectiveGroupSize >= 15
+                                ? '🚌 Tour Bus Group: 3–4 rooms recommended'
+                                : effectiveGroupSize >= 6
+                                ? '🚐 Medium Group: 2 rooms recommended'
+                                : 'Solo / Small Group: 1 room sufficient'}
+                            </span>
+                          </div>
+
+                          {/* Quick Count Shortcuts */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400">Quick Assign:</span>
+                            {[1, 2, 3, 4].map(num => (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => handleQuickAssignRoomCount(num)}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                                  selectedRoomIds.length === num
+                                    ? 'bg-amber-400 text-ink border-amber-400'
+                                    : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass'
+                                }`}
+                              >
+                                {num} {num === 1 ? 'Room' : 'Rooms'}
+                              </button>
                             ))}
-                          </select>
+                          </div>
                         </div>
 
-                        <div className="space-y-1 text-right">
-                          <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                            Daily Tariff
+                        {/* Vacant Rooms Multi-Select Chips */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] text-slate-400 uppercase block font-semibold">
+                            Tap Rooms to Assign to this Group:
+                          </label>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                            {vacantRooms.map(r => {
+                              const isSelected = selectedRoomIds.includes(r.id);
+                              return (
+                                <button
+                                  key={r.id}
+                                  type="button"
+                                  onClick={() => handleToggleRoom(r.id)}
+                                  className={`p-2 rounded-xl border text-left font-mono transition-all flex items-center justify-between ${
+                                    isSelected
+                                      ? 'bg-amber-400 text-ink border-amber-400 shadow-md font-bold'
+                                      : 'bg-panel text-slate-300 border-brass-soft/30 hover:border-brass-soft'
+                                  }`}
+                                >
+                                  <div>
+                                    <div className="text-xs font-black">Room {r.room_number}</div>
+                                    <div className={`text-[9px] ${isSelected ? 'text-ink/80' : 'text-slate-400'}`}>
+                                      F{r.floor} &bull; {r.room_type_id === 'deluxe' ? 'Deluxe' : 'Classic'}
+                                    </div>
+                                  </div>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    isSelected ? 'bg-ink text-amber-300' : 'bg-ink/60 text-slate-400'
+                                  }`}>
+                                    {isSelected ? '✓ Added' : '+ Add'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Selected Allocation Banner */}
+                        <div className="p-2.5 rounded-lg bg-panel border border-amber-500/30 flex items-center justify-between text-[11px] text-amber-200">
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                            <span>
+                              Allocated <strong>{selectedRoomIds.length} Rooms</strong> (
+                              {rooms.filter(r => selectedRoomIds.includes(r.id)).map(r => `Room ${r.room_number}`).join(', ') || 'None'}
+                              ) for {effectiveGroupSize} Pax
+                            </span>
                           </span>
-                          <div className="text-xl font-bold font-mono text-brass">
-                            {formatCurrency(nightlyRate)} <span className="text-xs text-slate-400 font-normal">/ day</span>
+                          <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider shrink-0">
+                            Total: {formatCurrency(taxableFreshUpTotal)}
+                          </span>
+                        </div>
+
+                        {/* Climate Toggle */}
+                        <div className="pt-2 border-t border-brass-soft/20 flex flex-wrap items-center justify-between gap-3">
+                          <span className="text-[11px] font-mono text-slate-300">Climate Option:</span>
+                          <div className="flex items-center gap-2 font-mono">
+                            <button
+                              type="button"
+                              onClick={() => setAcOrNonAc('AC')}
+                              className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                acOrNonAc === 'AC'
+                                  ? 'bg-brass text-ink border-brass shadow'
+                                  : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
+                              }`}
+                            >
+                              <Wind className="w-3.5 h-3.5" />
+                              <span>AC ({formatCurrency(roomType.ac_rate)})</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAcOrNonAc('Non-AC')}
+                              className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                acOrNonAc === 'Non-AC'
+                                  ? 'bg-brass text-ink border-brass shadow'
+                                  : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
+                              }`}
+                            >
+                              <Fan className="w-3.5 h-3.5" />
+                              <span>Non-AC ({formatCurrency(roomType.non_ac_rate)})</span>
+                            </button>
                           </div>
                         </div>
                       </div>
+                    ) : (
+                      <div className="bg-ink p-4 rounded-xl border border-brass-soft/40 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                              Select Room
+                            </label>
+                            <select
+                              value={roomId}
+                              onChange={(e) => {
+                                setRoomId(e.target.value);
+                                setSelectedRoomIds([e.target.value]);
+                              }}
+                              className="bg-panel border border-brass-soft rounded-lg px-3 py-1.5 text-white font-mono font-bold text-sm focus:outline-none focus:border-brass"
+                            >
+                              {vacantRooms.map(r => (
+                                <option key={r.id} value={r.id}>
+                                  Room {r.room_number} (Floor {r.floor} &bull; {r.status.toUpperCase()})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                      {/* Climate Toggle */}
-                      <div className="pt-2 border-t border-brass-soft/20 flex flex-wrap items-center justify-between gap-3">
-                        <span className="text-[11px] font-mono text-slate-300">Climate Type:</span>
-                        <div className="flex items-center gap-2 font-mono">
-                          <button
-                            type="button"
-                            onClick={() => setAcOrNonAc('AC')}
-                            className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
-                              acOrNonAc === 'AC'
-                                ? 'bg-brass text-ink border-brass shadow'
-                                : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
-                            }`}
-                          >
-                            <Wind className="w-3.5 h-3.5" />
-                            <span>AC ({formatCurrency(roomType.ac_rate)})</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setAcOrNonAc('Non-AC')}
-                            className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
-                              acOrNonAc === 'Non-AC'
-                                ? 'bg-brass text-ink border-brass shadow'
-                                : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
-                            }`}
-                          >
-                            <Fan className="w-3.5 h-3.5" />
-                            <span>Non-AC ({formatCurrency(roomType.non_ac_rate)})</span>
-                          </button>
+                          <div className="space-y-1 text-right">
+                            <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
+                              Daily Tariff
+                            </span>
+                            <div className="text-xl font-bold font-mono text-brass">
+                              {formatCurrency(nightlyRate)} <span className="text-xs text-slate-400 font-normal">/ day</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Climate Toggle */}
+                        <div className="pt-2 border-t border-brass-soft/20 flex flex-wrap items-center justify-between gap-3">
+                          <span className="text-[11px] font-mono text-slate-300">Climate Type:</span>
+                          <div className="flex items-center gap-2 font-mono">
+                            <button
+                              type="button"
+                              onClick={() => setAcOrNonAc('AC')}
+                              className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                acOrNonAc === 'AC'
+                                  ? 'bg-brass text-ink border-brass shadow'
+                                  : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
+                              }`}
+                            >
+                              <Wind className="w-3.5 h-3.5" />
+                              <span>AC ({formatCurrency(roomType.ac_rate)})</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAcOrNonAc('Non-AC')}
+                              className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                acOrNonAc === 'Non-AC'
+                                  ? 'bg-brass text-ink border-brass shadow'
+                                  : 'bg-panel text-slate-400 border-brass-soft/40 hover:text-white'
+                              }`}
+                            >
+                              <Fan className="w-3.5 h-3.5" />
+                              <span>Non-AC ({formatCurrency(roomType.non_ac_rate)})</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Day-Based Stay Duration Selection OR Fresh-Up Group Configuration */}
                     {!isDayUse ? (

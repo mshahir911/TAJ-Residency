@@ -124,19 +124,19 @@ export default function KeycardRoom({
         <div className="my-2 min-h-[75px] sm:min-h-[85px] flex flex-col justify-center">
           
           {/* 1. OCCUPIED CARD */}
-          {isOccupied && booking && (
+          {isOccupied && (
             <div className="bg-ink/80 rounded-xl p-2 sm:p-2.5 border border-brass-soft/30 space-y-1 font-mono text-xs">
               <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-brass uppercase font-bold">
                 <span className="flex items-center gap-1">
-                  <span>In-House Guest</span>
+                  <span>{isDayUse ? '⚡ Fresh-Up Guest' : 'In-House Guest'}</span>
                   {guest?.id_proof_photo_url && (
                     <span className="text-signal-green text-[8px] px-1 py-0.2 rounded bg-signal-green/15 border border-signal-green/30 font-bold">
-                      ✓ ID RECORDED
+                      ✓ ID
                     </span>
                   )}
                 </span>
                 <span className="px-1 py-0.2 rounded bg-brass/20 text-brass text-[9px]">
-                  {booking.ac_or_non_ac}
+                  {booking?.ac_or_non_ac || 'AC'}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-1">
@@ -163,13 +163,19 @@ export default function KeycardRoom({
               </div>
               <div className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1 truncate">
                 <Phone className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-brass shrink-0" />
-                <span className="truncate">{guest?.phone || '+91 98470 11223'}</span>
+                <span className="truncate">{guest?.phone || room.guest_phone || 'Registered at Desk'}</span>
               </div>
 
               {/* Stay Days & WiFi Pass */}
               <div className="flex items-center justify-between pt-1 border-t border-brass-soft/20 text-[9px] sm:text-[10px]">
                 <span className="text-slate-400 truncate">
-                  Stay: <strong className="text-white">{booking.nights || 1} Night</strong>
+                  {isDayUse ? (
+                    <span className="text-amber-300 font-bold">
+                      Day-Use: {booking?.duration_hours || 2}h
+                    </span>
+                  ) : (
+                    <span>Stay: <strong className="text-white">{booking?.nights || 1} Night</strong></span>
+                  )}
                 </span>
                 {room.wifi_voucher_code && (
                   <button
@@ -185,12 +191,13 @@ export default function KeycardRoom({
 
               {/* Checkout Due Deadline Indicator (Fresh-Up or Overnight) */}
               {(() => {
-                const isDayUse = booking.booking_type === 'day_use' || room.is_day_use;
+                const isDayUse = booking?.booking_type === 'day_use' || room.is_day_use || Boolean(room.day_use_end_time);
                 if (isDayUse) {
-                  const checkOutTime = new Date(booking.check_out_date || room.day_use_end_time || Date.now());
+                  const checkOutTime = new Date(booking?.check_out_date || room.day_use_end_time || Date.now());
                   const isOverdue = Date.now() > checkOutTime.getTime();
                   const timeFormatted = checkOutTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-                  const pax = booking.group_size || room.group_size || 1;
+                  const pax = booking?.group_size || room.group_size || 1;
+                  const roomCount = room.linked_room_numbers?.length || booking?.assigned_room_ids?.length || 1;
 
                   return (
                     <div className={`mt-1 px-1.5 py-0.5 rounded flex items-center justify-between font-mono text-[8.5px] sm:text-[9.5px] border ${
@@ -203,15 +210,15 @@ export default function KeycardRoom({
                         <span>Fresh-Up until <strong className="text-white font-bold">{timeFormatted}</strong></span>
                       </span>
                       <span className="text-[8px] font-bold uppercase px-1 rounded bg-amber-400 text-ink shrink-0 ml-1">
-                        {pax} Pax
+                        {pax} Pax{roomCount > 1 ? ` • ${roomCount} Rms` : ''}
                       </span>
                     </div>
                   );
                 }
 
                 const billing = calculateCheckoutBilling({
-                  checkInDate: booking.check_in_date,
-                  plannedNights: booking.nights || 1
+                  checkInDate: booking?.check_in_date || 'Today',
+                  plannedNights: booking?.nights || 1
                 });
                 return (
                   <div className={`mt-1 px-1.5 py-0.5 rounded flex items-center justify-between font-mono text-[8.5px] sm:text-[9.5px] border ${
