@@ -30,6 +30,7 @@ export default function GuestSelfCheckinModal({
   selfCheckins = [],
   onApproveSelfCheckin,
   onRejectSelfCheckin,
+  onConfirmPayment,
   onConfirmSelfCheckin,
   onAddSelfCheckin,
   rooms = [],
@@ -307,13 +308,30 @@ export default function GuestSelfCheckinModal({
                             </div>
                           </div>
 
-                          {/* Status Badge */}
-                          <div>
+                          {/* Status & Payment Badges */}
+                          <div className="flex items-center gap-1.5 flex-wrap justify-end">
                             {isApproved && (
-                              <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-mono font-bold border border-emerald-500/30 flex items-center gap-1.5">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>Approved (Room {item.room_number})</span>
-                              </span>
+                              <>
+                                <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-mono font-bold border border-emerald-500/30 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Room {item.room_number}</span>
+                                </span>
+                                {item.payment_status === 'paid' ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-signal-green/15 text-signal-green text-[10px] font-mono font-bold border border-signal-green/30 flex items-center gap-1">
+                                    <Check className="w-3 h-3" />
+                                    <span>Paid ₹{item.amount_due || item.advance_paid || 1500}</span>
+                                  </span>
+                                ) : item.payment_status === 'payment_submitted' ? (
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-mono font-bold border border-amber-400/40 flex items-center gap-1 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                    <span>⚡ Guest Claims Paid (₹{item.amount_due || 1500})</span>
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full bg-panel text-slate-400 text-[10px] font-mono border border-white/10">
+                                    Awaiting UPI (₹{item.amount_due || 1500})
+                                  </span>
+                                )}
+                              </>
                             )}
                             {isPending && (
                               <span className="px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-mono font-bold border border-amber-400/40 flex items-center gap-1.5">
@@ -540,6 +558,36 @@ export default function GuestSelfCheckinModal({
                                 </button>
                               </div>
                             )}
+                          </div>
+                        )}
+
+                        {/* Action Panel for Approved Items Awaiting Payment */}
+                        {isApproved && item.payment_status !== 'paid' && (
+                          <div className="pt-2 border-t border-brass-soft/20 flex flex-wrap items-center justify-between gap-2.5 bg-panel/70 p-3 rounded-xl border border-brass-soft/30">
+                            <div className="text-xs font-mono">
+                              <div className="flex items-center gap-1.5 text-brass font-bold">
+                                <Smartphone className="w-3.5 h-3.5" />
+                                <span>UPI Payment Due: ₹{item.amount_due || 1500}</span>
+                              </div>
+                              {item.payment_status === 'payment_submitted' ? (
+                                <p className="text-[10.5px] text-amber-300 mt-0.5 animate-pulse font-semibold">
+                                  ⚡ Guest clicked "I have paid via UPI" on their smartphone. Check your UPI app / SMS and confirm.
+                                </p>
+                              ) : (
+                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                  Guest has dynamic QR code & UPI deep-link active on their phone.
+                                </p>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => onConfirmPayment && onConfirmPayment(item.id, { paymentMode: 'UPI', amountPaid: item.amount_due || 1500 })}
+                              className="px-4 py-2 rounded-lg bg-signal-green hover:bg-emerald-400 text-black font-bold text-xs shadow-lg shadow-signal-green/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer ml-auto whitespace-nowrap"
+                            >
+                              <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                              <span>✓ Mark as Paid (₹{item.amount_due || 1500})</span>
+                            </button>
                           </div>
                         )}
                       </div>

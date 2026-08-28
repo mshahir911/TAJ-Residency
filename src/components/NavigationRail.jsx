@@ -67,7 +67,7 @@ export default function NavigationRail({
       { id: 'guests', label: 'Guest Directory & CRM', icon: Users, shortcut: 'U' },
       { id: 'analytics', label: 'Owner Analytics & Yield', icon: TrendingUp, shortcut: 'O' },
       { id: 'pl', label: 'Monthly P&L & Expenses', icon: Wallet, shortcut: 'P' },
-      { id: 'gst', label: 'GST & Tax Settings', icon: Percent, shortcut: 'T' },
+      { id: 'gst', label: 'GST & Payment Settings', icon: Percent, shortcut: 'T' },
       { id: 'overrides', label: 'Seasonal Rate Overrides', icon: Tag, shortcut: 'R' },
       { id: 'freshup', label: 'Fresh-Up Group Slabs', icon: Zap, shortcut: 'F' },
       { id: 'staff', label: 'Staff Admin & PINs', icon: Users, shortcut: 'S' },

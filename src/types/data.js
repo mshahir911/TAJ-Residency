@@ -153,6 +153,7 @@ export const SEED_PROPERTIES = [
     subtitle: 'Adivaram, Kozhikode • Kerala',
     address: 'NH 766, Adivaram, Kozhikode, Kerala 673586',
     gst_number: '32AABCT9988Q1Z4',
+    upi_id: '',
     phone: '+91 99617 01414',
     whatsapp: '+91 99617 01414',
     email: 'frontdesk@tajresidency.com',
@@ -167,6 +168,7 @@ export const SEED_PROPERTIES = [
     subtitle: 'Plantation Retreat & Suites • Lakkidi, Wayanad',
     address: 'National Highway 766, Lakkidi Viewpoint, Wayanad, Kerala 673576',
     gst_number: '32AABCM1122P1Z9',
+    upi_id: '',
     phone: '+91 94950 22000',
     whatsapp: '+91 94950 22000',
     email: 'stay@malabarheritage.com',
@@ -183,7 +185,8 @@ export const DEFAULT_GST_CONFIG = {
   standardRate: 12,
   luxuryRate: 18,
   legalEntity: 'Taj Residency Tourist Home Pvt Ltd',
-  jurisdiction: 'Kozhikode, Kerala (State 32)'
+  jurisdiction: 'Kozhikode, Kerala (State 32)',
+  upiId: ''
 };
 
 export const DEFAULT_FRESH_UP_TIERS = [

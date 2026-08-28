@@ -215,6 +215,7 @@ export default function App() {
       <PublicSelfCheckinPage
         property={store.property}
         onAddSelfCheckin={store.actions.addGuestSelfCheckin}
+        onPaymentSubmitted={store.actions.notifySelfCheckinPaymentSubmitted}
         onNavigateToStaffLogin={() => {
           setIsPublicSelfCheckin(false);
           if (typeof window !== 'undefined' && window.history?.pushState) {
@@ -528,6 +529,7 @@ export default function App() {
           selfCheckins={store.selfCheckins}
           onApproveSelfCheckin={store.actions.approveSelfCheckin}
           onRejectSelfCheckin={store.actions.rejectSelfCheckin}
+          onConfirmPayment={store.actions.confirmSelfCheckinPayment}
           onConfirmSelfCheckin={store.actions.approveSelfCheckin}
           onAddSelfCheckin={store.actions.addGuestSelfCheckin}
           rooms={store.rooms}

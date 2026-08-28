@@ -9,17 +9,21 @@ import {
   AlertTriangle,
   HelpCircle,
   Coins,
-  ArrowLeft
+  ArrowLeft,
+  QrCode,
+  Smartphone,
+  Check,
+  CreditCard
 } from 'lucide-react';
 import { DEFAULT_GST_CONFIG } from '../types/data';
 
 /**
- * GSTSettingsModal
- * Allows Owners & Managers to configure legal GST compliance settings:
+ * GSTSettingsModal (Owner GST & Digital Payment Setup)
+ * Allows Owners & Managers to configure:
  * 1. GSTIN (15-character Goods and Services Tax Identification Number)
  * 2. Legal Business Entity Name & Jurisdiction
- * 3. SAC Code (996311 - Hotel Accommodation Services)
- * 4. GST Slabs (Standard Rate 12% vs Luxury Rate 18% based on tariff threshold)
+ * 3. SAC Code (996311 - Hotel Accommodation Services) & Rate Slabs
+ * 4. Owner UPI ID (VPA) for dynamic guest self-payment QR codes upon check-in
  */
 export default function GSTSettingsModal({
   isOpen,
@@ -35,6 +39,7 @@ export default function GSTSettingsModal({
   const [slabThreshold, setSlabThreshold] = useState(gstConfig?.slabThreshold || 7500);
   const [standardRate, setStandardRate] = useState(gstConfig?.standardRate || 12);
   const [luxuryRate, setLuxuryRate] = useState(gstConfig?.luxuryRate || 18);
+  const [upiId, setUpiId] = useState(property?.upi_id || gstConfig?.upiId || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Sync with current props when opened
@@ -47,6 +52,7 @@ export default function GSTSettingsModal({
       setSlabThreshold(gstConfig?.slabThreshold || 7500);
       setStandardRate(gstConfig?.standardRate || 12);
       setLuxuryRate(gstConfig?.luxuryRate || 18);
+      setUpiId(property?.upi_id || gstConfig?.upiId || '');
       setSavedSuccess(false);
     }
   }, [isOpen, property, gstConfig]);
@@ -72,7 +78,8 @@ export default function GSTSettingsModal({
         sacCode: sacCode.trim(),
         slabThreshold: Number(slabThreshold) || 7500,
         standardRate: Number(standardRate) || 12,
-        luxuryRate: Number(luxuryRate) || 18
+        luxuryRate: Number(luxuryRate) || 18,
+        upiId: upiId.trim()
       });
     }
     setSavedSuccess(true);
@@ -82,6 +89,7 @@ export default function GSTSettingsModal({
   };
 
   const isGstConfigured = Boolean(gstNumber && gstNumber.trim().length >= 10);
+  const isUpiConfigured = Boolean(upiId && upiId.trim().includes('@'));
 
   if (!isOpen) return null;
 
@@ -107,20 +115,25 @@ export default function GSTSettingsModal({
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <h2 className="font-display font-bold text-white text-sm sm:text-lg leading-tight truncate">
-                  GST & Tax Setup
+                  Owner GST & Payment Setup
                 </h2>
                 {isGstConfigured ? (
                   <span className="px-1.5 py-0.5 rounded bg-signal-green/15 text-signal-green text-[9px] font-mono font-bold border border-signal-green/30 shrink-0">
-                    Active
+                    GST Active
                   </span>
                 ) : (
                   <span className="px-1.5 py-0.5 rounded bg-signal-amber/15 text-signal-amber text-[9px] font-mono font-bold border border-signal-amber/30 shrink-0">
-                    Not Configured
+                    GST Pending
+                  </span>
+                )}
+                {isUpiConfigured && (
+                  <span className="px-1.5 py-0.5 rounded bg-brass/15 text-brass text-[9px] font-mono font-bold border border-brass/30 shrink-0">
+                    UPI Active
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
-                SAC 996311 • Slabs & Legal Header
+                SAC 996311 • Slabs • Owner UPI (VPA) Collection
               </p>
             </div>
           </div>
@@ -137,33 +150,16 @@ export default function GSTSettingsModal({
         {/* Body Form */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1 font-mono text-xs">
           
-          {/* Status Alert Banner */}
-          {!isGstConfigured ? (
-            <div className="p-3 bg-signal-amber/10 border border-signal-amber/30 rounded-xl flex items-start gap-2.5 text-signal-amber">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="text-[11px] leading-relaxed">
-                <strong>GST Number Not Set:</strong> Invoices will display <em>"GST number not configured"</em> until you enter your valid 15-digit GSTIN below.
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 bg-signal-green/10 border border-signal-green/30 rounded-xl flex items-start gap-2.5 text-signal-green">
-              <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="text-[11px] leading-relaxed">
-                <strong>GST Invoicing Active:</strong> All generated paper & digital invoices will print with GSTIN <strong>{gstNumber}</strong> and SAC <strong>{sacCode}</strong>.
-              </div>
-            </div>
-          )}
-
           {/* Section 1: Business GSTIN & Legal Identity */}
           <div className="bg-ink p-4 rounded-xl border border-brass-soft/30 space-y-3">
             <div className="text-xs font-bold text-brass uppercase flex items-center gap-1.5 border-b border-brass-soft/20 pb-1.5">
               <Building2 className="w-3.5 h-3.5" />
-              <span>Business Tax Identification</span>
+              <span>1. Business Tax Identification</span>
             </div>
 
             <div className="space-y-1">
               <label className="text-[10px] uppercase text-slate-400 block font-semibold">
-                GSTIN / GST Number (15 Characters) *
+                GSTIN / GST Number (15 Characters)
               </label>
               <input
                 type="text"
@@ -207,11 +203,61 @@ export default function GSTSettingsModal({
             </div>
           </div>
 
-          {/* Section 2: SAC Code & GST Slabs */}
+          {/* Section 2: Owner UPI Digital Payments (VPA) */}
+          <div className="bg-ink p-4 rounded-xl border border-brass-soft/30 space-y-3">
+            <div className="flex items-center justify-between border-b border-brass-soft/20 pb-1.5">
+              <div className="text-xs font-bold text-brass uppercase flex items-center gap-1.5">
+                <QrCode className="w-3.5 h-3.5" />
+                <span>2. Owner UPI Collection ID (VPA)</span>
+              </div>
+              {isUpiConfigured ? (
+                <span className="text-[9px] text-emerald-400 font-bold flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  <span>Self-Pay Active</span>
+                </span>
+              ) : (
+                <span className="text-[9px] text-amber-400 font-bold">
+                  Setup Required
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase text-slate-400 block font-semibold">
+                Owner UPI ID / Virtual Payment Address (VPA) <span className="text-brass">*</span>
+              </label>
+              <div className="relative">
+                <Smartphone className="w-4 h-4 absolute left-3 top-2.5 text-brass" />
+                <input
+                  type="text"
+                  placeholder="e.g. tajresidency@upi or ownername@okhdfcbank"
+                  value={upiId}
+                  onChange={(e) => setUpiId(e.target.value.trim().toLowerCase())}
+                  className="w-full bg-panel border border-brass-soft rounded-lg pl-9 pr-3 py-2 text-white font-mono font-bold text-sm focus:outline-none focus:border-brass placeholder:text-slate-600"
+                />
+              </div>
+              <p className="text-[9.5px] text-slate-400 leading-relaxed pt-0.5">
+                Used to dynamically generate custom UPI payment QR codes & instant deep-links directly onto guests' smartphones upon room allocation. Funds settle directly into this bank VPA.
+              </p>
+            </div>
+
+            {isUpiConfigured && (
+              <div className="p-2.5 rounded-lg bg-panel border border-brass/30 text-[10px] text-slate-300 space-y-1 font-mono">
+                <span className="text-brass font-bold block uppercase text-[9px]">
+                  ✓ Live Dynamic UPI Link Template:
+                </span>
+                <div className="text-slate-400 truncate select-all">
+                  upi://pay?pa=<strong className="text-white">{upiId}</strong>&pn={encodeURIComponent(property?.name || 'Taj Residency')}&am=&#123;amount&#125;&cu=INR&tn=Room&#123;no&#125;
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 3: SAC Code & GST Slabs */}
           <div className="bg-ink p-4 rounded-xl border border-brass-soft/30 space-y-3">
             <div className="text-xs font-bold text-brass uppercase flex items-center gap-1.5 border-b border-brass-soft/20 pb-1.5">
               <Coins className="w-3.5 h-3.5" />
-              <span>Service Accounting Code (SAC) & Rate Slabs</span>
+              <span>3. SAC Code & Rate Slabs</span>
             </div>
 
             <div className="space-y-1">
@@ -294,24 +340,24 @@ export default function GSTSettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-panel border border-brass-soft/30 text-slate-300 hover:text-white text-xs font-bold transition-all"
+              className="px-4 py-2 rounded-xl bg-panel border border-brass-soft/30 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer"
             >
               Cancel
             </button>
 
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-brass text-ink font-bold text-xs hover:brightness-110 shadow-lg shadow-brass/20 flex items-center gap-1.5 active:scale-95 transition-all"
+              className="px-5 py-2.5 rounded-xl bg-brass text-ink font-bold text-xs hover:brightness-110 shadow-lg shadow-brass/20 flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
             >
               {savedSuccess ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 text-ink" />
-                  <span>GST Settings Saved!</span>
+                  <span>Settings Saved!</span>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4 stroke-[2.5]" />
-                  <span>Save GST Configuration</span>
+                  <span>Save Owner & Payment Settings</span>
                 </>
               )}
             </button>

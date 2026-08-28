@@ -610,16 +610,35 @@ export function usePMSStore() {
         }
 
         case 'SELF_CHECKIN_STATUS_UPDATED': {
-          const { selfCheckinId, status, room_number, rejection_reason } = mutation;
+          const { selfCheckinId, status, room_number, rejection_reason, amount_due, payment_status, upi_id } = mutation;
           return {
             ...prev,
             selfCheckins: (prev.selfCheckins || []).map(sc => {
               if (sc.id === selfCheckinId) {
                 return {
                   ...sc,
-                  status,
+                  status: status || sc.status,
                   room_number: room_number || sc.room_number,
-                  rejection_reason: rejection_reason || sc.rejection_reason
+                  rejection_reason: rejection_reason || sc.rejection_reason,
+                  amount_due: amount_due !== undefined ? amount_due : sc.amount_due,
+                  payment_status: payment_status || sc.payment_status,
+                  upi_id: upi_id || sc.upi_id
+                };
+              }
+              return sc;
+            })
+          };
+        }
+
+        case 'SELF_CHECKIN_PAYMENT_SUBMITTED': {
+          const { selfCheckinId } = mutation;
+          return {
+            ...prev,
+            selfCheckins: (prev.selfCheckins || []).map(sc => {
+              if (sc.id === selfCheckinId) {
+                return {
+                  ...sc,
+                  payment_status: 'payment_submitted'
                 };
               }
               return sc;
@@ -893,10 +912,30 @@ export function usePMSStore() {
   };
 
   const updateGSTConfig = (newConfig) => {
-    setState(prev => ({
-      ...prev,
-      gstConfig: { ...prev.gstConfig, ...newConfig }
-    }));
+    setState(prev => {
+      const updatedProperties = (prev.properties || SEED_PROPERTIES).map(p => {
+        if (p.id === prev.activePropertyId) {
+          return {
+            ...p,
+            gst_number: newConfig.gstNumber !== undefined ? newConfig.gstNumber : p.gst_number,
+            upi_id: newConfig.upiId !== undefined ? newConfig.upiId : p.upi_id
+          };
+        }
+        return p;
+      });
+
+      return {
+        ...prev,
+        properties: updatedProperties,
+        gstConfig: { ...prev.gstConfig, ...newConfig }
+      };
+    });
+
+    logAudit(
+      'PROPERTY_SETTINGS_UPDATED',
+      'Owner Settings',
+      `Updated GSTIN (${newConfig.gstNumber || 'None'}) and Owner UPI VPA (${newConfig.upiId || 'None'})`
+    );
   };
 
   // 5. Seasonal Overrides
@@ -1696,6 +1735,10 @@ export function usePMSStore() {
       notes: `Pre-arrival QR Check-In (${checkin.id}) approved by ${currentStaff?.name || 'Reception'}.`
     });
 
+    const finalAmountDue = Number(rateApplied) || (assignedRoom.room_type_id === 'deluxe' ? 2000 : 1500);
+    const ownerUpi = activeProperty?.upi_id || state.gstConfig?.upiId || '';
+    const initialPaymentStatus = advancePaid > 0 ? 'paid' : (ownerUpi ? 'pending_upi_payment' : 'pending_desk_payment');
+
     // Update self-check-in queue record to 'approved'
     setState(prev => ({
       ...prev,
@@ -1706,6 +1749,9 @@ export function usePMSStore() {
             status: 'approved',
             room_number: assignedRoom.room_number,
             booking_id: createdBooking?.id,
+            amount_due: finalAmountDue,
+            payment_status: initialPaymentStatus,
+            upi_id: ownerUpi,
             approved_at: new Date().toISOString(),
             approved_by: currentStaff?.name || 'Receptionist'
           };
@@ -1718,7 +1764,7 @@ export function usePMSStore() {
     saveGuestToSupabase({
       id: 'gst-' + checkinId,
       property_id: state.activePropertyId,
-      notes: `SELF_CHECKIN_APPROVED:Room ${assignedRoom.room_number}`
+      notes: `SELF_CHECKIN_APPROVED:Room ${assignedRoom.room_number}:Due ₹${finalAmountDue}:${initialPaymentStatus}`
     }).catch(() => {});
 
     // Broadcast status update to guest's phone in real-time
@@ -1727,16 +1773,115 @@ export function usePMSStore() {
       selfCheckinId: checkinId,
       status: 'approved',
       room_number: assignedRoom.room_number,
-      bookingId: createdBooking?.id
+      bookingId: createdBooking?.id,
+      amount_due: finalAmountDue,
+      payment_status: initialPaymentStatus,
+      upi_id: ownerUpi
     });
 
     logAudit(
       'SELF_CHECKIN_APPROVED',
       `Room ${assignedRoom.room_number}`,
-      `Self check-in for ${checkin.guest_name} approved and assigned to Room ${assignedRoom.room_number}.`
+      `Self check-in for ${checkin.guest_name} approved and assigned to Room ${assignedRoom.room_number}. Amount Due: ₹${finalAmountDue} (${initialPaymentStatus}).`
     );
 
     return createdBooking;
+  };
+
+  const confirmSelfCheckinPayment = (checkinId, options = {}) => {
+    const { paymentMode = 'UPI', amountPaid } = options;
+
+    let confirmedAmount = amountPaid;
+    let targetBookingId = null;
+    let guestName = 'Guest';
+    let roomNumber = '';
+
+    setState(prev => {
+      const checkin = (prev.selfCheckins || []).find(sc => sc.id === checkinId);
+      if (checkin) {
+        targetBookingId = checkin.booking_id;
+        guestName = checkin.guest_name;
+        roomNumber = checkin.room_number;
+        if (!confirmedAmount) confirmedAmount = checkin.amount_due || 1500;
+      }
+
+      const updatedCheckins = (prev.selfCheckins || []).map(sc => {
+        if (sc.id === checkinId) {
+          return {
+            ...sc,
+            payment_status: 'paid',
+            advance_paid: confirmedAmount,
+            payment_mode: paymentMode,
+            payment_confirmed_at: new Date().toISOString(),
+            payment_confirmed_by: currentStaff?.name || 'Receptionist'
+          };
+        }
+        return sc;
+      });
+
+      // Also update the live booking in store to record advance payment
+      let updatedBookings = prev.bookings;
+      if (targetBookingId && prev.bookings?.[targetBookingId]) {
+        updatedBookings = {
+          ...prev.bookings,
+          [targetBookingId]: {
+            ...prev.bookings[targetBookingId],
+            advance_paid: confirmedAmount,
+            payment_mode: paymentMode
+          }
+        };
+      }
+
+      return {
+        ...prev,
+        selfCheckins: updatedCheckins,
+        bookings: updatedBookings
+      };
+    });
+
+    // Broadcast payment confirmation to guest phone in real time
+    realtimeRelay.broadcastMutation({
+      type: 'SELF_CHECKIN_STATUS_UPDATED',
+      selfCheckinId: checkinId,
+      status: 'approved',
+      payment_status: 'paid',
+      amount_paid: confirmedAmount,
+      room_number: roomNumber
+    });
+
+    // Update guest note in Supabase
+    saveGuestToSupabase({
+      id: 'gst-' + checkinId,
+      property_id: state.activePropertyId,
+      notes: `SELF_CHECKIN_APPROVED:Room ${roomNumber}:Paid ₹${confirmedAmount}:paid`
+    }).catch(() => {});
+
+    logAudit(
+      'SELF_CHECKIN_PAYMENT_VERIFIED',
+      `Room ${roomNumber || 'Pre-Checkin'}`,
+      `Receptionist ${currentStaff?.name || 'Staff'} visually confirmed ₹${confirmedAmount} UPI payment from ${guestName}.`
+    );
+  };
+
+  const notifySelfCheckinPaymentSubmitted = (checkinId) => {
+    setState(prev => ({
+      ...prev,
+      selfCheckins: (prev.selfCheckins || []).map(sc => {
+        if (sc.id === checkinId) {
+          return {
+            ...sc,
+            payment_status: 'payment_submitted'
+          };
+        }
+        return sc;
+      })
+    }));
+
+    // Broadcast to front desk reception terminal
+    realtimeRelay.broadcastMutation({
+      type: 'SELF_CHECKIN_PAYMENT_SUBMITTED',
+      selfCheckinId: checkinId
+    });
   };
 
   const rejectSelfCheckin = (checkinId, reason = 'Additional verification required at counter', status = 'rejected') => {
@@ -1971,6 +2116,8 @@ export function usePMSStore() {
       approveSelfCheckin,
       rejectSelfCheckin,
       confirmSelfCheckin,
+      confirmSelfCheckinPayment,
+      notifySelfCheckinPaymentSubmitted,
       updateGuestIdProof,
       updateGSTConfig,
       logAudit

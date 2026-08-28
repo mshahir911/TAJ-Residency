@@ -15,14 +15,23 @@ import {
   XCircle,
   Key,
   Wifi,
-  ArrowLeft
+  ArrowLeft,
+  QrCode,
+  Smartphone,
+  ExternalLink,
+  Check,
+  CreditCard,
+  IndianRupee,
+  Copy
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import IdPhotoCaptureWidget from './IdPhotoCaptureWidget';
 import { realtimeRelay } from '../services/realtimeRelay';
 
 export default function PublicSelfCheckinPage({
   property,
   onAddSelfCheckin,
+  onPaymentSubmitted,
   onNavigateToStaffLogin
 }) {
   const hotelName = property?.name || 'Taj Residency';
@@ -48,6 +57,7 @@ export default function PublicSelfCheckinPage({
   const [liveCheckinRecord, setLiveCheckinRecord] = useState(null);
   const [formError, setFormError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedUpi, setCopiedUpi] = useState(false);
 
   // Restore active submission from session storage if user refreshed
   useEffect(() => {
@@ -73,8 +83,11 @@ export default function PublicSelfCheckinPage({
         setLiveCheckinRecord(prev => {
           const updated = {
             ...(prev || {}),
-            status: mutation.status,
+            status: mutation.status || prev?.status,
             room_number: mutation.room_number || prev?.room_number,
+            amount_due: mutation.amount_due !== undefined ? mutation.amount_due : prev?.amount_due,
+            payment_status: mutation.payment_status || prev?.payment_status,
+            upi_id: mutation.upi_id || prev?.upi_id,
             rejection_reason: mutation.rejection_reason || mutation.notes || prev?.rejection_reason
           };
           try {
@@ -146,6 +159,31 @@ export default function PublicSelfCheckinPage({
     }
   };
 
+  const handleGuestClaimPaid = () => {
+    if (!activeCheckinId) return;
+    const updated = {
+      ...(liveCheckinRecord || {}),
+      payment_status: 'payment_submitted'
+    };
+    setLiveCheckinRecord(updated);
+    try {
+      sessionStorage.setItem('taj_guest_active_self_checkin_record', JSON.stringify(updated));
+    } catch (e) {}
+
+    if (typeof onPaymentSubmitted === 'function') {
+      onPaymentSubmitted(activeCheckinId);
+    }
+  };
+
+  const handleCopyUpi = (vpa) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(vpa).then(() => {
+        setCopiedUpi(true);
+        setTimeout(() => setCopiedUpi(false), 2000);
+      });
+    }
+  };
+
   const handleEditSubmission = () => {
     setStage('form');
   };
@@ -165,6 +203,20 @@ export default function PublicSelfCheckinPage({
     setBackPhotoUrl('');
     setStage('form');
   };
+
+  // Compute dynamic UPI parameters if approved
+  const isApproved = liveCheckinRecord?.status === 'approved';
+  const roomNumber = liveCheckinRecord?.room_number || '202';
+  const amountDue = Number(liveCheckinRecord?.amount_due) || 1500;
+  const ownerUpi = liveCheckinRecord?.upi_id || property?.upi_id || '';
+  const paymentStatus = liveCheckinRecord?.payment_status || 'pending_upi_payment';
+  const isPaid = paymentStatus === 'paid';
+  const isPaymentSubmitted = paymentStatus === 'payment_submitted';
+
+  // Dynamic UPI Deep Link URL
+  const upiDeepLink = ownerUpi
+    ? `upi://pay?pa=${encodeURIComponent(ownerUpi)}&pn=${encodeURIComponent(hotelName)}&am=${amountDue}&cu=INR&tn=${encodeURIComponent(`Room${roomNumber} ${hotelName}`)}`
+    : '';
 
   return (
     <div
@@ -509,28 +561,39 @@ export default function PublicSelfCheckinPage({
         ) : (
           /* Live Verification / Approved State */
           <div className="space-y-5 animate-in fade-in duration-300 flex-1 flex flex-col justify-center">
-            {liveCheckinRecord?.status === 'approved' ? (
-              /* Approved: VIP Keycard Screen */
+            {isApproved ? (
+              /* Approved: VIP Keycard & UPI Self-Payment Screen */
               <div
-                className="p-6 rounded-3xl border-2 shadow-2xl text-center space-y-5"
-                style={{ backgroundColor: '#141A23', borderColor: 'rgba(16, 185, 129, 0.5)' }}
+                className="p-5 sm:p-6 rounded-3xl border-2 shadow-2xl text-center space-y-4"
+                style={{
+                  backgroundColor: '#141A23',
+                  borderColor: isPaid ? 'rgba(16, 185, 129, 0.5)' : 'rgba(201, 162, 75, 0.5)'
+                }}
               >
-                <div
-                  className="w-16 h-16 rounded-2xl border flex items-center justify-center mx-auto"
-                  style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', borderColor: 'rgba(16, 185, 129, 0.4)', color: '#34D399' }}
-                >
-                  <Key className="w-8 h-8" />
+                {/* Header Status Badge */}
+                <div className="flex items-center justify-center">
+                  {isPaid ? (
+                    <span
+                      className="px-3 py-1 rounded-full text-xs font-mono font-bold inline-flex items-center gap-1.5 border"
+                      style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', borderColor: 'rgba(16, 185, 129, 0.35)', color: '#34D399' }}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>✓ CHECK-IN & PAYMENT VERIFIED</span>
+                    </span>
+                  ) : (
+                    <span
+                      className="px-3 py-1 rounded-full text-xs font-mono font-bold inline-flex items-center gap-1.5 border"
+                      style={{ backgroundColor: 'rgba(201, 162, 75, 0.2)', borderColor: 'rgba(201, 162, 75, 0.35)', color: '#C9A24B' }}
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                      <span>ROOM ASSIGNED • SETTLE BILL VIA UPI</span>
+                    </span>
+                  )}
                 </div>
 
                 <div>
-                  <span
-                    className="px-3 py-1 rounded-full text-xs font-mono font-bold inline-block border"
-                    style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', borderColor: 'rgba(16, 185, 129, 0.35)', color: '#34D399' }}
-                  >
-                    ✓ CHECK-IN APPROVED
-                  </span>
                   <h2
-                    className="font-serif font-bold text-2xl mt-3"
+                    className="font-serif font-bold text-2xl"
                     style={{ color: '#FFFFFF' }}
                   >
                     Welcome, {liveCheckinRecord?.guest_name || guestName}!
@@ -539,40 +602,172 @@ export default function PublicSelfCheckinPage({
                     className="text-xs mt-1"
                     style={{ color: '#CBD5E1' }}
                   >
-                    Your registration has been verified by the reception desk.
+                    Your room has been assigned by {hotelName} Front Desk.
                   </p>
                 </div>
 
-                <div
-                  className="p-5 rounded-2xl border space-y-3"
-                  style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(16, 185, 129, 0.35)' }}
-                >
-                  <span
-                    className="text-[11px] font-mono uppercase tracking-wider block font-semibold"
-                    style={{ color: '#94A3B8' }}
-                  >
-                    Your Assigned Accommodation
-                  </span>
+                {/* Assigned Room & Bill Amount Showcase */}
+                <div className="grid grid-cols-2 gap-3">
                   <div
-                    className="text-4xl font-serif font-extrabold tracking-tight"
-                    style={{ color: '#C9A24B' }}
+                    className="p-3.5 rounded-2xl border text-center space-y-1"
+                    style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(201, 162, 75, 0.35)' }}
                   >
-                    Room {liveCheckinRecord?.room_number || '202'}
+                    <span
+                      className="text-[10px] font-mono uppercase tracking-wider block font-semibold"
+                      style={{ color: '#94A3B8' }}
+                    >
+                      Assigned Room
+                    </span>
+                    <div
+                      className="text-3xl font-serif font-extrabold tracking-tight"
+                      style={{ color: '#C9A24B' }}
+                    >
+                      Room {roomNumber}
+                    </div>
                   </div>
+
                   <div
-                    className="text-xs flex items-center justify-center gap-2 font-medium"
-                    style={{ color: '#CBD5E1' }}
+                    className="p-3.5 rounded-2xl border text-center space-y-1"
+                    style={{
+                      backgroundColor: '#0A0D12',
+                      borderColor: isPaid ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.35)'
+                    }}
                   >
-                    <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Free High-Speed WiFi Activated</span>
+                    <span
+                      className="text-[10px] font-mono uppercase tracking-wider block font-semibold"
+                      style={{ color: '#94A3B8' }}
+                    >
+                      {isPaid ? 'Amount Paid' : 'Total Tariff Due'}
+                    </span>
+                    <div
+                      className="text-3xl font-serif font-extrabold tracking-tight"
+                      style={{ color: isPaid ? '#34D399' : '#FBBF24' }}
+                    >
+                      ₹{amountDue}
+                    </div>
                   </div>
                 </div>
 
+                {/* UPI Self-Payment Section (Active if not marked paid yet) */}
+                {!isPaid ? (
+                  <div
+                    className="p-4 rounded-2xl border space-y-3.5 text-center"
+                    style={{ backgroundColor: '#0A0D12', borderColor: 'rgba(201, 162, 75, 0.35)' }}
+                  >
+                    {ownerUpi ? (
+                      <>
+                        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                          <div className="flex items-center gap-1.5 text-xs font-mono font-bold" style={{ color: '#C9A24B' }}>
+                            <Smartphone className="w-4 h-4" />
+                            <span>Instant UPI Self-Payment</span>
+                          </div>
+                          <span className="text-[10px] font-mono" style={{ color: '#34D399' }}>
+                            Zero Desk Wait
+                          </span>
+                        </div>
+
+                        {/* Dynamic Freshly Generated QR Code */}
+                        <div className="p-3 bg-white rounded-2xl inline-block shadow-lg border border-brass/40 mx-auto">
+                          <QRCodeSVG
+                            value={upiDeepLink}
+                            size={160}
+                            level="M"
+                            includeMargin={false}
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-center">
+                          <div className="font-mono text-xs font-bold text-white">
+                            Scan with GPay / PhonePe / Paytm / Any UPI App
+                          </div>
+                          <div className="flex items-center justify-center gap-1.5 text-[11px] font-mono" style={{ color: '#CBD5E1' }}>
+                            <span>Payee VPA:</span>
+                            <strong className="text-brass select-all">{ownerUpi}</strong>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyUpi(ownerUpi)}
+                              className="p-1 hover:text-white transition-colors"
+                              title="Copy UPI ID"
+                            >
+                              {copiedUpi ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Direct Pay Deep Link Button */}
+                        <a
+                          href={upiDeepLink}
+                          className="w-full py-3 rounded-xl bg-gradient-to-r from-[#C9A24B] to-[#DFBF76] text-[#0B0F14] font-bold text-xs hover:brightness-110 active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer block"
+                        >
+                          <CreditCard className="w-4 h-4 stroke-[2.5]" />
+                          <span>Pay ₹{amountDue} via UPI App (GPay / PhonePe / Paytm)</span>
+                        </a>
+
+                        {/* I Have Paid Confirmation Button */}
+                        {isPaymentSubmitted ? (
+                          <div
+                            className="p-3 rounded-xl border text-xs font-mono space-y-1 text-center"
+                            style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.35)', color: '#FDE68A' }}
+                          >
+                            <div className="font-bold flex items-center justify-center gap-1.5 text-amber-300">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                              <span>Payment Submitted to Desk</span>
+                            </div>
+                            <p className="text-[10.5px] text-slate-300">
+                              Waiting for front desk receptionist to verify in their UPI app and issue keycard pass...
+                            </p>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleGuestClaimPaid}
+                            className="w-full py-2.5 rounded-xl border text-xs font-mono font-semibold transition-all hover:bg-panel cursor-pointer"
+                            style={{ borderColor: 'rgba(255, 255, 255, 0.2)', color: '#CBD5E1' }}
+                          >
+                            ⚡ I have completed this UPI payment &rarr;
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      /* If Owner UPI is not configured yet */
+                      <div className="space-y-2 py-2">
+                        <div className="text-xs font-bold" style={{ color: '#FFFFFF' }}>
+                          Settlement at Reception Desk
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Please settle ₹{amountDue} at the counter via Cash, UPI QR stand, or Card.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Paid Confirmation Stamp & Keycard Pickup */
+                  <div
+                    className="p-4 rounded-2xl border text-center space-y-2.5"
+                    style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                  >
+                    <div className="flex items-center justify-center gap-1.5 text-emerald-400 font-bold text-sm">
+                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                      <span>Payment of ₹{amountDue} Confirmed by Desk</span>
+                    </div>
+                    <p className="text-xs" style={{ color: '#CBD5E1' }}>
+                      Your digital payment has been verified. Free high-speed WiFi is activated.
+                    </p>
+                    <div
+                      className="text-xs flex items-center justify-center gap-2 font-medium pt-1"
+                      style={{ color: '#34D399' }}
+                    >
+                      <Wifi className="w-3.5 h-3.5" />
+                      <span>Network: {property?.wifiSSID || 'TajResidency_Guest'}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div
-                  className="p-3.5 rounded-xl border text-xs leading-relaxed"
+                  className="p-3 rounded-xl border text-xs leading-relaxed"
                   style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.1)', color: '#E2E8F0' }}
                 >
-                  🏛️ Please show this screen to the reception desk staff to collect your physical electronic room keycard.
+                  🏛️ Please show this screen at the front desk counter to collect your electronic keycard for <strong>Room {roomNumber}</strong>.
                 </div>
 
                 <button
@@ -717,7 +912,7 @@ export default function PublicSelfCheckinPage({
                   className="p-3 rounded-xl border text-[11px]"
                   style={{ backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)', color: '#CBD5E1' }}
                 >
-                  ⚡ This screen updates automatically as soon as the receptionist assigns your room.
+                  ⚡ This screen updates automatically as soon as the receptionist assigns your room & rate.
                 </div>
 
                 <div className="flex items-center justify-center gap-3 pt-2">
